@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="UdpQuickShare.Pages.SendingFiles"
+             xmlns:page="clr-namespace:UdpQuickShare.Pages"
+             xmlns:model="clr-namespace:UdpQuickShare.ViewModels"
+             Title="SendingFiles">
+    <ContentPage.BindingContext>
+        <model:SendingFilesViewModel/>
+    </ContentPage.BindingContext>
+    <Shell.TitleView>
+        <Grid ColumnDefinitions="*,*">
+            <HorizontalStackLayout>
+                <Label Text="自动打开"
+                   TextColor="White"
+                   VerticalTextAlignment="Center"/>
+                <Switch IsToggled="{Binding AutoOpen}"
+                        />
+            </HorizontalStackLayout>
+            <Button Text="清空"
+                        WidthRequest="70"
+                        x:Name="Clear"  
+                        Grid.Column="1"
+                        Command="{Binding ClearCommand}"
+                        HorizontalOptions="End"/>
+        </Grid>
+    </Shell.TitleView>
+    <Grid RowDefinitions="*">
+        <ListView x:Name="Files"
+                  RowHeight="250"
+                  SelectionMode="None"
+                  ItemsSource="{Binding Files}"
+                 
+                  >
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <ViewCell>
+                        <page:FileItemView/>
+                    </ViewCell>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</ContentPage>

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Grid        xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:model="clr-namespace:UdpQuickShare.ViewModels"
+             x:Class="UdpQuickShare.Pages.FileItemView"
+             >
+    <Grid x:DataType="model:FileItem"
+          RowDefinitions="2*,*,4*,2*"
+          x:Name="MainLayout">
+        <Label Text="{Binding Name}"
+               FontAttributes="Bold,Italic"/>
+        <ProgressBar Progress="{Binding Percent}"
+                     Grid.Row="1"/>
+        <Grid Grid.Row="2"
+              RowDefinitions="*,*,*"
+              ColumnDefinitions="*,*">
+            <Label Text="{Binding PercentString}"
+                   TextColor="GreenYellow"/>
+            <Label Grid.Column="1" Text="{Binding LeftTimeString}"
+                   TextColor="HotPink"/>
+            <Label Grid.Row="1">
+                <Label.FormattedText>
+                    <FormattedString>
+                        <Span Text="{Binding CurrentSizeString}"
+                              TextColor="DeepSkyBlue"/>
+                        <Span Text="/"/>
+                        <Span Text="{Binding TotalSizeString}"
+                              TextColor="DarkBlue"/>
+                    </FormattedString>
+                </Label.FormattedText>
+            </Label>
+            <Label Text="{Binding SpeedString}"
+                   FontAttributes="Italic"
+                   TextColor="Red"
+                   Grid.Column="1"
+                   Grid.Row="1"/>
+            <Button x:Name="Delete"
+                    Text="删除"
+                    Grid.Column="0"
+                    Grid.Row="2"
+                    Command="{Binding DeleteCommand}"/>
+            <Button x:Name="StopOrResume"
+                    Text="继续"
+                    Grid.Column="1"
+                    Grid.Row="2"
+                    Command="{Binding PauseOrStartCommand}"/>
+            <Button x:Name="Open"
+                    Text="打开"
+                    Grid.Column="1"
+                    Grid.Row="2"             
+                    Command="{Binding OpenCommand}"/>
+            <Button x:Name="Copy"
+                    Text="复制"
+                    Grid.Column="1"
+                    Grid.Row="2"         
+                    Command="{Binding CopyCommand}"/>
+        </Grid>
+        <Label x:Name="Comment"
+               TextColor="Green"
+                     Grid.Row="3"/>
+    </Grid>
+</Grid>

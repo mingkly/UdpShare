@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="UdpQuickShare.Pages.Devices"
+             xmlns:model="clr-namespace:UdpQuickShare.ViewModels"
+             Shell.PresentationMode="ModalAnimated"          
+             Title="Devices">
+    <ContentPage.BindingContext>
+        <model:DevicesPageViewModel />
+    </ContentPage.BindingContext>
+    <Grid RowDefinitions="3*,*,3*,*,3*"
+      ColumnDefinitions="*,4*,*">
+        <Button Text="艘寻设备"
+                x:Name="FindDevice"
+                Grid.Column="1"
+                Grid.Row="1"
+                Command="{Binding FindDeviceCommand}"/>
+        <ListView x:Name="DevicesList"
+                  Grid.Row="2"
+                  Grid.Column="1"
+                  RowHeight="50"            
+                  ItemsSource="{Binding Devices}"
+                  >
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <ViewCell x:DataType="model:DeviceModel"
+                              >
+                        <Grid ColumnDefinitions="8*,*"
+                              >
+                            <Grid.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding ChooseCommand}"/>
+                            </Grid.GestureRecognizers>
+                            <Label >
+                                <Label.FormattedText>
+                                    <FormattedString>
+                                        <Span Text="{Binding Name}"/>
+                                        <Span Text="{Binding Ip.Address}"/>
+                                    </FormattedString>
+                                </Label.FormattedText>
+                            </Label>
+                            <Button Text="删除"
+                                    x:Name="Delete"
+                                    Grid.Column="1"
+                                    Command="{Binding DeleteCommand}"/>
+                            <Grid.Triggers>
+                                <DataTrigger TargetType="Grid"
+                                             Binding="{Binding SendThis}"
+                                             Value="true">
+                                    <Setter Property="BackgroundColor"
+                                            Value="LightGreen"/>
+                                </DataTrigger>
+                            </Grid.Triggers>
+                        </Grid>
+                    </ViewCell>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+        <Button Text="返回"
+                Grid.Row="3"
+                Grid.Column="1"
+                Clicked="Button_Clicked"/>
+    </Grid>
+</ContentPage>

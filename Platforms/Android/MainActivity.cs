@@ -20,9 +20,6 @@ public class MainActivity : MauiAppCompatActivity
     {
         base.OnCreate(savedInstanceState);;
         Instance = this;
-        AndroidX.Fragment.App.FragmentTransaction t;
-        
-
     }
     public TaskCompletionSource<PickFileResult> PickFileTaskCompletionSource { get; set; }
     public int PickFileId = 1;

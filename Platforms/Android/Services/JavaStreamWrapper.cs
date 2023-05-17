@@ -1,6 +1,8 @@
 ﻿using Android.OS;
 using Android.Runtime;
 using Java.IO;
+using Java.Nio;
+using Java.Nio.Channels;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,39 +13,17 @@ namespace UdpQuickShare.Platforms.Android.Services
 {
     internal class JavaStreamWrapper : Stream
     {
-        public override bool CanRead => inputStream != null;
+        public override bool CanRead => true;
 
-        public override bool CanSeek
-        {
-            get
-            {
-                if (inputStream != null)
-                {
-                    return true;
-                }
-                else if (outputStream != null)
-                {
-                    return true;
-                }
-                return false;
-            }
-        }
+        public override bool CanSeek=>true;
 
-        public override bool CanWrite => outputStream != null;
+        public override bool CanWrite => true;
 
         public override long Length
         {
             get
             {
-                if (inputStream != null)
-                {
-                    return inputStream.Channel.Size();
-                }
-                else if(outputStream != null)
-                {
-                    return outputStream.Channel.Size();
-                }
-                return 0;
+                return channel.Size();
             }
         }
 
@@ -51,48 +31,27 @@ namespace UdpQuickShare.Platforms.Android.Services
         {
             get
             {
-                if (outputStream != null)
-                {                    
-                    return outputStream.Channel.Position();
-                }
-                if (inputStream != null)
-                {
-                    return inputStream.Channel.Position();
-                }
-                return 0;
+                return channel.Position();
             }
             set
             {
-                if (inputStream != null)
-                {
-                    inputStream.Channel.Position(value);
-                }
-                if (outputStream != null)
-                {
-                    outputStream.Channel.Position(value);
-                }
+                channel.Position(value);
             }
         }
-
-        readonly FileOutputStream outputStream;
-        readonly FileInputStream inputStream;
         readonly ParcelFileDescriptor fileDescriptor;
-        public JavaStreamWrapper( FileOutputStream outputStream)
+        readonly RandomAccessFile randomAccessFile;
+        readonly FileChannel channel;
+        readonly FileOutputStream outputStream;
+        public JavaStreamWrapper(Java.IO.File file)
         {
-            this.outputStream = outputStream;
+            randomAccessFile = new RandomAccessFile(file, "rw");
+            channel = randomAccessFile.Channel;           
         }
-        public JavaStreamWrapper(FileInputStream inputStream )
-        {
-            this.inputStream = inputStream;
-        }
-        public JavaStreamWrapper(FileOutputStream outputStream,FileInputStream inputStream)
-        {
-            this.inputStream = inputStream;
-            this.outputStream = outputStream;
-        }
-        public JavaStreamWrapper( ParcelFileDescriptor fileDescriptor):this(new FileOutputStream(fileDescriptor.FileDescriptor),new FileInputStream(fileDescriptor.FileDescriptor))
+        public JavaStreamWrapper( ParcelFileDescriptor fileDescriptor)
         {
             this.fileDescriptor = fileDescriptor;
+            outputStream = new FileOutputStream(fileDescriptor.FileDescriptor);
+            channel= outputStream.Channel;
         }
 
         public override void Flush()
@@ -102,8 +61,17 @@ namespace UdpQuickShare.Platforms.Android.Services
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            var readed= inputStream?.Read(buffer, offset, count) ?? 0;
-            outputStream?.Channel.Position(inputStream.Channel.Position());
+            if(Position+count > Length)
+            {
+                count = (int)(Length - Position);
+            }
+            if (randomAccessFile != null)
+            {
+                return randomAccessFile.Read(buffer, offset, count);
+            }
+            var javaBuffer = ByteBuffer.Wrap(buffer, offset, count);
+            var readed = channel.Read(javaBuffer);
+            javaBuffer.Get(buffer, offset, readed);
             return readed;
         }
 
@@ -112,16 +80,13 @@ namespace UdpQuickShare.Platforms.Android.Services
             switch(origin)
             {
                 case SeekOrigin.Begin:
-                    inputStream?.Channel.Position(offset);
-                    outputStream?.Channel.Position(offset);
+                    channel.Position(offset);
                     break;
                 case SeekOrigin.Current:
-                    inputStream?.Channel.Position(inputStream.Channel.Position()+offset);
-                    outputStream?.Channel.Position(outputStream.Channel.Position()+offset);
+                    channel.Position(channel.Position()+offset);
                     break;
                 case SeekOrigin.End:
-                    inputStream?.Channel.Position(inputStream.Channel.Size()-offset);
-                    outputStream?.Channel.Position(outputStream.Channel.Size() - offset);
+                    channel.Position(channel.Size() - offset);
                     break;
             }
             return Position;
@@ -129,23 +94,25 @@ namespace UdpQuickShare.Platforms.Android.Services
 
         public override void SetLength(long value)
         {
-            outputStream?.Channel.Truncate(value);
-            inputStream?.Channel.Truncate(value);
+            channel.Truncate(value);
         }
 
         public override void Write(byte[] buffer, int offset, int count)
         {
-            outputStream?.Write(buffer, offset, count);
-            inputStream?.Channel.Position(outputStream.Channel.Position());
+            var javaBuffer = ByteBuffer.Wrap(buffer, offset, count);
+            channel.Write(javaBuffer);
+            
         }
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
             try
             {
+                fileDescriptor?.Close();
                 fileDescriptor?.Dispose();
-                inputStream?.Dispose();
+                randomAccessFile?.Dispose();
                 outputStream?.Dispose();
+                channel?.Dispose();
             }
             catch { }
         }

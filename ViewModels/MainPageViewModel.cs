@@ -29,6 +29,12 @@ namespace UdpQuickShare.ViewModels
             get => targetDevice;
             set => SetProperty(ref targetDevice, value);
         }
+        bool canSend;
+        public bool CanSend
+        {
+            get => canSend;
+            set=>SetProperty(ref canSend, value);
+        }
         Color currentDeviceTextColor;
         public Color CurrentDeviceTextColor
         {
@@ -55,6 +61,7 @@ namespace UdpQuickShare.ViewModels
         public MainPageViewModel(App app)
         {
             this.app = app;
+            CanSend = true;
             SendTextCommand=new AsyncRelayCommand<string>(app.SendText, canExecute: (s) => !app.SendingOrRecieving);
             SendImageCommand = new AsyncRelayCommand(() => app.SendFile(FileType.Image), canExecute: () => !app.SendingOrRecieving);
             SendVideoCommand = new AsyncRelayCommand(() => app.SendFile(FileType.Video), canExecute: () => !app.SendingOrRecieving);
@@ -80,6 +87,7 @@ namespace UdpQuickShare.ViewModels
             app.SendingDeviceChanged += App_SendingDeviceChanged;
             app.Client.CurrentIpChanged += Client_CurrentIpChanged;
             app.Client.ExposedChanged += Client_ExposedChanged;
+            app.SendingOrRecievingChanged += (sender, e) => CanSend = !e;
         }
 
         private void Client_ExposedChanged(object sender, bool e)

@@ -30,6 +30,8 @@
         <ListView x:Name="Files"
                   RowHeight="250"
                   SelectionMode="None"
+                  SeparatorVisibility="Default"
+                  SeparatorColor="Black"
                   ItemsSource="{Binding Files}"
                   >
             <ListView.ItemTemplate>

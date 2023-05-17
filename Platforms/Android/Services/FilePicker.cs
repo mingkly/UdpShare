@@ -3,10 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using UdpQuickShare.FileActions;
 using UdpQuickShare.FileActions.FilePickers;
+using UdpQuickShare.Platforms.Android;
 
 namespace UdpQuickShare.FileActions.FilePickers
 {

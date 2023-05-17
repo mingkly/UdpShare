@@ -59,18 +59,23 @@
             </Border>
             <Button Text="发送图片"
                     x:Name="SendImages"
+                    IsEnabled="{Binding CanSend}"
                     Command="{Binding SendImageCommand}"/>
             <Button Text="发送音频"
                     x:Name="SendAudios"
+                    IsEnabled="{Binding CanSend}"
                     Command="{Binding SendAudioCommand}"/>
             <Button Text="发送视频"
                     x:Name="SendVideos"
+                    IsEnabled="{Binding CanSend}"
                     Command="{Binding SendVideoCommand}"/>
             <Button Text="发送其他"
                     x:Name="SendOthers"
+                    IsEnabled="{Binding CanSend}"
                     Command="{Binding SendOtherCommand}"/>
             <Button Text="发送多个"
                     x:Name="SendMulti"
+                    IsEnabled="{Binding CanSend}"
                     Command="{Binding SendMultiCommand}"/>
         </VerticalStackLayout>
     </ScrollView>

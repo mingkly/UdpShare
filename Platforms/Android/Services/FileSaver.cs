@@ -34,10 +34,7 @@ namespace UdpQuickShare.FileActions.FileSavers
         string otherPath=OtherPath;
 
         MainActivity Context=>MainActivity.Instance;
-        void other()
-        {
-            
-        }
+
         public FileCreateInfo CreatePlatform(string fileName, long fileLength, FileType fileType)
         {
             var path = GetPathPlatform(fileType);
@@ -94,7 +91,7 @@ namespace UdpQuickShare.FileActions.FileSavers
                         }                       
                     }
                     file = new Java.IO.File(file, $"{fileName}");
-                    stream =new JavaStreamWrapper(new Java.IO.FileOutputStream(file),new FileInputStream(file));
+                    stream =new JavaStreamWrapper(file);
                     path = file.AbsolutePath;
                 }
                 return new FileCreateInfo()
@@ -123,7 +120,9 @@ namespace UdpQuickShare.FileActions.FileSavers
                     file = DocumentFile.FromTreeUri(Context, folderUri);
                 }
                 file = file.CreateFile("*/*", fileName);
+                
                 ContentValues fileValue = new ContentValues();
+              
                 var fd = Context.ContentResolver.OpenFileDescriptor(file.Uri, "rw", null);
                 var stream = new JavaStreamWrapper(fd);
                 return new FileCreateInfo()
@@ -199,8 +198,8 @@ namespace UdpQuickShare.FileActions.FileSavers
             }
             else
             {
-                return System.IO.File.OpenWrite(path);
-            }
+                return new JavaStreamWrapper(new Java.IO.File(path));
+            } 
             
         }
     }

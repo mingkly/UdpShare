@@ -28,9 +28,22 @@ public partial class App : Application
     public static IDataStore DataStore { get; private set; }
     public  Dictionary<uint, string> PickedFiles { get; private set; }
     public ObservableCollection<DeviceModel> Devices { get; private set; }
-    public bool SendingOrRecieving { get; private set; }
+    bool sendingOrRecieving;
+    public bool SendingOrRecieving
+    {
+        get => sendingOrRecieving;
+        set
+        {
+            if (sendingOrRecieving != value)
+            {
+                sendingOrRecieving = value;
+                SendingOrRecievingChanged?.Invoke(this, sendingOrRecieving);
+            }
+        }
+    }
 
     public event EventHandler SendingDeviceChanged;
+    public event EventHandler<bool> SendingOrRecievingChanged;
     public static readonly int BufferSize = 1024;
     public static readonly int UdpPort = 4321;
     public static readonly int TcpPort = 4322;
@@ -48,11 +61,11 @@ public partial class App : Application
         var decoder = new DefaultDecoder();
         Client = new ShareClient(encoder, decoder, FileSaver, DataStore, UdpPort, TcpPort, BufferSize);
         LoadFileFromClient();
+        LoadDevice();
         Client.Recieving += Client_Recieving;
         Client.Sending += Client_Sending;
         Client.OnDeviceFound += Client_OnDeviceFound;
         Client.DeviceNotFound += Client_DeviceNotFound;
-        LoadDevice();
         Instance = this;
         Client.SetUp();
         Client.ExposeThisDevice();
@@ -100,7 +113,7 @@ public partial class App : Application
     public void AddOrUpdateDevice(string deviceName, IPEndPoint ip, bool sendThis)
     {
         var existed = Devices.FirstOrDefault(x => x.Ip.Equals(ip));
-        var hasSendDevice = Devices.Count(x => x.SendThis) > 1;
+        var hasSendDevice = Devices.Count(x => x.SendThis) >=1;
         if (existed == null)
         {
             Devices.Add(new DeviceModel(this)

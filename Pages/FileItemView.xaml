@@ -5,7 +5,7 @@
              x:Class="UdpQuickShare.Pages.FileItemView"
              >
     <Grid x:DataType="model:FileItem"
-          RowDefinitions="2*,*,4*,2*"
+          RowDefinitions="2*,*,5*,2*"
           x:Name="MainLayout">
         <Label Text="{Binding Name}"
                FontAttributes="Bold,Italic"/>

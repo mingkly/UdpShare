@@ -37,7 +37,7 @@
 		<AppxAutoIncrementPackageRevision>True</AppxAutoIncrementPackageRevision>
 		<AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>
 		<GenerateTestArtifacts>True</GenerateTestArtifacts>
-		<AppInstallerUri>D:\Apks\Release</AppInstallerUri>
+		<AppInstallerUri>D:\UdpShare</AppInstallerUri>
 		<HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
 		<ProduceReferenceAssembly>False</ProduceReferenceAssembly>
 

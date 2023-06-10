@@ -17,5 +17,7 @@ public partial class MainPage : ContentPage,INotifyPropertyChanged
 	{
 		InitializeComponent();
     }
+
+
 }
 

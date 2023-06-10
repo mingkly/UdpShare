@@ -5,7 +5,7 @@ namespace UdpQuickShare.Pages;
 public partial class FileItemView : Grid
 {
     private FileItem fileItem;
-    bool isSending => fileItem?.IsSendingFile ?? true;
+    bool IsSending => fileItem?.IsSendingFile ?? true;
     public FileItemView()
 	{
 		InitializeComponent();
@@ -113,7 +113,7 @@ public partial class FileItemView : Grid
         }
         else
         {
-            Open.IsVisible = !isSending;
+            Open.IsVisible = !IsSending;
             Copy.IsVisible = false;
         }
     }

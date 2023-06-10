@@ -11,7 +11,6 @@ namespace UdpQuickShare.ViewModels
 {
     public class FileItem:ViewModelBase
     {
-        App app;
         public ICommand PauseOrStartCommand { get; }
         public ICommand OpenCommand { get; }
         public ICommand CopyCommand { get; }
@@ -19,7 +18,6 @@ namespace UdpQuickShare.ViewModels
         public ICommand DeleteCommand { get; }
         public FileItem(App app,bool isSendingFile)
         {
-            this.app = app;
             IsSendingFile= isSendingFile;
             PauseOrStartCommand = new Command(() =>
             {
@@ -44,8 +42,8 @@ namespace UdpQuickShare.ViewModels
                 }
             });
             OpenCommand=new AsyncRelayCommand(() =>app.OpenRecievedFile(this));
-            CopyCommand = new AsyncRelayCommand(() => app.CopyText(this));
-            InfoCommand = new AsyncRelayCommand(() => app.InfoReciveFile(this));
+            CopyCommand = new AsyncRelayCommand(() => App.CopyText(this));
+            InfoCommand = new AsyncRelayCommand(() => App.InfoReciveFile(this));
         }
         public bool IsSendingFile { get; set; }
         public uint FileId { get; set; }

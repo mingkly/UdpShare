@@ -5,7 +5,7 @@ using Android.Net;
 using Android.OS;
 using Android.Provider;
 using AndroidX.DocumentFile.Provider;
-using UdpQuickShare.FileActions.FilePickers;
+
 using UdpQuickShare.FileActions.FileSavers;
 using UdpQuickShare.Services;
 using Uri = Android.Net.Uri;
@@ -21,84 +21,19 @@ public class MainActivity : MauiAppCompatActivity
         base.OnCreate(savedInstanceState);;
         Instance = this;
     }
-    public TaskCompletionSource<PickFileResult> PickFileTaskCompletionSource { get; set; }
-    public int PickFileId = 1;
-    public TaskCompletionSource<IEnumerable<PickFileResult>> PickFilesTaskCompletionSource { get; set; }
-    public int PickFilesId = 2;
-    public TaskCompletionSource<PickFileResult> PickFolderTaskCompletionSource { get; set; }
-    public int PickFolderId = 3;
+    public static string GetAbsolutePath(string path)
+    {
+        var uri=Android.Net.Uri.Parse(path);
+        System.Diagnostics.Debug.WriteLine(uri.Path);
+        uri = MediaStore.GetMediaUri(Android.App.Application.Context, uri);
+        using var cusor = Android.App.Application.Context.ContentResolver?.Query(uri,
+            new string[] { "_data",MediaStore.IMediaColumns.RelativePath}, null, null, null);
+        if (cusor != null && cusor.MoveToNext())
+        {
+            var dataCol = cusor.GetColumnIndex("_data");
+            return cusor.GetString(dataCol);
+        }
+        return uri.Path;
+    }
 
-    protected override void OnActivityResult(int requestCode, Result resultCode, Intent data)
-    {
-        base.OnActivityResult(requestCode, resultCode, data);
-        if (requestCode == PickFileId)
-        {
-            try
-            {
-                if (resultCode == Result.Ok)
-                {
-                    var uri = data.Data;
-                    var takeFlags = ActivityFlags.GrantReadUriPermission;
-                    ContentResolver.TakePersistableUriPermission(uri, takeFlags);
-                    PickFileTaskCompletionSource.TrySetResult(ReadFile(uri));
-                    return;
-                }
-            }
-            catch { }
-            PickFileTaskCompletionSource.TrySetResult(null);
-        }
-        else if(requestCode == PickFilesId)
-        {
-            try
-            {
-                if (resultCode == Result.Ok)
-                {
-                    var results = new List<PickFileResult>();
-                    for(int i = 0; i < data.ClipData.ItemCount; i++)
-                    {
-                        var uri=data.ClipData.GetItemAt(i);
-                        var takeFlags = ActivityFlags.GrantReadUriPermission;
-                        ContentResolver.TakePersistableUriPermission(uri.Uri, takeFlags);
-                        try
-                        {
-                            results.Add(ReadFile(uri.Uri));
-                        }
-                        catch { }
-                    }
-                    PickFilesTaskCompletionSource.TrySetResult(results);
-                    return;
-                }
-            }
-            catch { }
-            PickFilesTaskCompletionSource.TrySetResult(null);
-        }
-        else if (requestCode == PickFolderId)
-        {
-            if ((resultCode == Result.Ok) && (data != null))
-            {
-                Android.Net.Uri uri = data.Data;              
-                var takeFlags = ActivityFlags.GrantReadUriPermission;
-                ContentResolver.TakePersistableUriPermission(uri, takeFlags);
-                PickFolderTaskCompletionSource.TrySetResult(new PickFileResult()
-                {
-                    Uri=uri.ToString(),
-                    Name=data.Data.Path,
-                });
-            }
-            else
-            {
-                PickFolderTaskCompletionSource.TrySetResult(null);
-            }
-        }
-    }
-    PickFileResult ReadFile(Uri uri)
-    {
-        var documentFile = DocumentFile.FromSingleUri(this, uri);
-        return new PickFileResult()
-        {
-            Name = documentFile.Name,
-            Uri = uri.ToString(),
-            Length = documentFile.Length(),
-        };
-    }
 }

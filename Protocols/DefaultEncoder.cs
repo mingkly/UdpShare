@@ -68,7 +68,7 @@ namespace UdpQuickShare.Protocols
         {
             buffer.WriteInt32((int)segement.SegementType);
             buffer.WriteInt32(segement.FileId);
-            buffer.WriteInt32(segement.FileLength);
+            buffer.WriteInt64(segement.FileLength);
             buffer.WriteInt32((int)segement.FileType);
             buffer.WriteString(segement.FileName);
         }

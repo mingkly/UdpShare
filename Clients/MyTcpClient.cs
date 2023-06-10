@@ -1,4 +1,5 @@
-﻿using System;
+﻿
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -10,225 +11,134 @@ using UdpQuickShare.FileActions;
 using UdpQuickShare.FileActions.FileSavers;
 
 
-
 namespace UdpQuickShare.Clients
 {
     public class MyTcpClient
     {
-        int port;
-        int maxBufferSize;
-        object sendFileLock = new object();
-        object recievingFileLock = new object();
-        FileActions.FilePickers.IFilePicker filePicker;
-        IFileSaver fileSaver;
+        readonly int port;
+        readonly int maxBufferSize;
+        readonly object sendFileLock = new();
+        readonly object recievingFileLock = new();
 
-        public event EventHandler<FileResultEventArgs> Recieving;
-        public event EventHandler<FileResultEventArgs> Sending;
-        public void Log(string message)=>App.Log(message);
-        public Dictionary<uint, SendingFile> SendingFiles { get; private set; }
-        public Dictionary<uint, RecievingFile> RecievingFiles { get; private set; }
-        public MyTcpClient(int port, int maxBufferSize, FileActions.FilePickers.IFilePicker filePicker, IFileSaver fileSaver)
+        public event EventHandler<ClientMission> Recieving;
+        public event EventHandler<ClientMission> Sending;
+        public static void Log(string message) => App.Log(message);
+        public MyTcpClient(int port, int maxBufferSize)
         {
             this.port = port;
             this.maxBufferSize = maxBufferSize;
-            SendingFiles = new Dictionary<uint, SendingFile>();
-            RecievingFiles = new Dictionary<uint, RecievingFile>();
-            this.filePicker = filePicker;
-            this.fileSaver = fileSaver;
         }
-        public Task StartSendFile(uint fileId, string path, string fileName, IPEndPoint endPoint, long startPostion = 0)
+        public Task StartSendFile(ClientMission mission,Stream stream=null)
         {
             lock (sendFileLock)
             {
-                if (SendingFiles.ContainsKey(fileId))
+                stream ??=mission.OpenRead();
+                MyTcpClient.Log($"start send file {mission.FileName} to {mission.IPEndPoint} in position {mission.Position}");
+                if (mission.Position != 0)
                 {
-                    return Task.CompletedTask;
+                    stream.Seek(mission.Position, SeekOrigin.Begin);
                 }
-                Log($"start send file {fileName} to {endPoint} in position {startPostion}");
-                var stream = filePicker.OpenPickedFile(path);
-                if (startPostion != 0)
-                {
-                    stream.Seek(startPostion, SeekOrigin.Begin);
-                }
-                var cancellationTokenSource = new CancellationTokenSource();
-                var sendingFile = new SendingFile(cancellationTokenSource, fileId, path, fileName, stream.Length, endPoint);
-                SendingFiles.TryAdd(fileId,sendingFile );
-                OnSendingStart(fileId);
-                return Task.Factory.StartNew(async () =>
+                mission.CancellationTokenSource= new CancellationTokenSource();
+                mission.Type = MissionType.Sending;
+                return Task.Run(async () =>
                 {
                     using var tcpFileSender = new TcpFileSender(maxBufferSize);
                     using (stream)
                     {
-                        var sended = await tcpFileSender.SendFileAsync(stream, new IPEndPoint(endPoint.Address, port), p => OnSending(fileId, p), cancellationTokenSource.Token);
+                        var sended = await tcpFileSender.SendFileAsync(stream, new IPEndPoint(mission.IPEndPoint.Address, port), p => OnSending(mission, p),mission.CancellationTokenSource.Token);
                         if (sended)
                         {
-                            if(stream.Position<stream.Length)
+                            if (stream.Position < stream.Length)
                             {
-                                Log($"file {fileName} sended stopped");
-                                Sending?.Invoke(this, new FileResultEventArgs(sendingFile, FileResultState.Stop, stream.Position));
+                                MyTcpClient.Log($"file {mission.FileName} sended stopped");
+                                mission.Type = MissionType.WaitResumeSending;
                             }
                             else
                             {
-                                OnSended(fileId);
-                                Log($"file {fileName} sended");
-                            }                           
+                                mission.Type = MissionType.SendingCompleted;
+                                MyTcpClient.Log($"file {mission.FileName} sended");
+                            }
                         }
                         else
                         {
-                            Log($"file {fileName} sended stopped");
-                            Sending?.Invoke(this, new FileResultEventArgs(sendingFile, FileResultState.Stop, stream.Position));
+                            MyTcpClient.Log($"file {mission.FileName} sended stopped");
+                            mission.Type = MissionType.WaitResumeSending;
                         }
                     }
-                }, TaskCreationOptions.LongRunning);
+                });
             }
         }
-        public void StopSending(uint fileId)
+        public Task Resend(ClientMission mission)
         {
-            if (SendingFiles.ContainsKey(fileId))
-            {
-                SendingFiles[fileId].CancellationTokenSource.Cancel();
-            }
+            return StartSendFile(mission);
         }
-        public void Resend(uint fileId, long startPosition)
+        void OnSending(ClientMission mission, long position)
         {
-            if (SendingFiles.ContainsKey(fileId))
-            {
-                var file = SendingFiles[fileId];
-                SendingFiles.Remove(fileId);
-                StartSendFile(file.FileId, file.FilePath, file.FileName, file.IPEndPoint, startPosition);
-            }
-        }
-        void OnSendingStart(uint fileId)
-        {
-            Sending?.Invoke(this, new FileResultEventArgs(SendingFiles[fileId], FileResultState.Start));
-        }
-        void OnSending(uint fileId, long position)
-        {
-            SendingFiles[fileId].Position = position;
-            Sending?.Invoke(this, new FileResultEventArgs(SendingFiles[fileId], FileResultState.Updating,position));
-        }
-        void OnSended(uint fileId)
-        {
-            SendingFiles[fileId].Position = SendingFiles[fileId].FileLength;
-            Sending?.Invoke(this, new FileResultEventArgs(SendingFiles[fileId], FileResultState.Ending,1));
+            mission.Position = position;
+            mission.Type = MissionType.Sending;
+            Sending?.Invoke(this, mission);
         }
 
-
-        public void StartRecievingFile(uint fileId, string fileName, long fileLength, FileType fileType,IPEndPoint senderIp, long startPostion = 0, string savedPath = null)
+        public Task StartRecievingFile(ClientMission mission)
         {
             lock (recievingFileLock)
             {
-                if (RecievingFiles.ContainsKey(fileId))
-                {
-                    return;
-                }
                 Stream stream;
-                Log($"start recieing file({fileName}) in position {startPostion} from {senderIp} in path{savedPath}");
-                if (savedPath != null)
+                MyTcpClient.Log($"start recieing file({mission.FileName}) in position {mission.Position} from {mission.IPEndPoint} in path{mission.FilePath}");
+                if (mission.FilePath != null&&mission.FilePlatformPath!=null)
                 {
-                    stream = fileSaver.OpenCreatedFile(savedPath);
+                    stream = mission.OpenWrite();
+                    MyTcpClient.Log($"open created file {mission.FilePath} for save recieing file");
                 }
                 else
                 {
-                    var file = fileSaver.Create(fileName, fileLength, fileType);
-                    savedPath = file.Path;
+                    var file = FileSaveManager.CreateFile(mission.FileName, mission.FileType);
+                    mission.FilePath = file.Path;
+                    mission.FilePlatformPath = file.PlatformPath;
                     stream = file.Stream;
-                    Log($"create file {savedPath} for save recieing file");
+                    MyTcpClient.Log($"create file {mission.FilePath} for save recieing file");
                 }
-                if (startPostion != 0)
+                if (mission.Position != 0)
                 {
-                    stream.Seek(startPostion, SeekOrigin.Begin);
+                    stream.Seek(mission.Position, SeekOrigin.Begin);
                 }
-                var cancellationTokenSource = new CancellationTokenSource();
-                var recievingFile = new RecievingFile(cancellationTokenSource, fileId, fileName, savedPath, fileLength, fileType,senderIp);
-                RecievingFiles.TryAdd(fileId, recievingFile);
-                OnRecieveStart(fileId);
-                Task.Factory.StartNew(async () =>
+                mission.CancellationTokenSource = new CancellationTokenSource();
+                mission.Type = MissionType.Recieving;
+                return Task.Run(async () =>
                 {
                     var tcpFileReciever = new TcpFileReciever(maxBufferSize, port);
-                    var recieved = await tcpFileReciever.RecievingFile(stream, p => OnRecieving(fileId, p), cancellationTokenSource.Token);
-                    var info = new FileCreateInfo
+                    var recieved = await tcpFileReciever.RecievingFile(stream, p => OnRecieving(mission, p), mission.CancellationTokenSource.Token,startPosition:mission.Position);
+                    using (stream) { }
+                    if (recieved.CompletedNormal)
                     {
-                        Path = savedPath,
-                        FileType = fileType,
-                        Stream = stream,
-                    };
-                    var position=stream.Position;
-                    await fileSaver.SaveAsync(info);
-                    if (recieved)
-                    {
-                        if (position < fileLength)
+                        if (recieved.Readed < mission.FileLength)
                         {
-                            Log($"file {fileName} recieve stopped");
-                            Recieving?.Invoke(this, new FileResultEventArgs(recievingFile, FileResultState.Stop, position));
+                            MyTcpClient.Log($"file {mission.FileName} recieve stopped");
+                            mission.Type = MissionType.WaitResumeRecieving;
                         }
                         else
                         {
-                            OnRecieved(fileId);
-                            Log($"file {fileName} recieved");
-                        }                        
+                            mission.Type = MissionType.RecievingComleted;
+                        }
                     }
                     else
                     {
-                        Log($"file {fileName} recieve stopped");
-                        Recieving?.Invoke(this, new FileResultEventArgs(recievingFile, FileResultState.Stop, position));
+                        MyTcpClient.Log($"file {mission.FileName} recieve stopped");
+                        mission.Type = MissionType.WaitResumeRecieving;
                     }
-                }, TaskCreationOptions.LongRunning);
+                });
             }
         }
 
-        public void StopRecieving(uint fileId)
-        {
-            if (RecievingFiles.ContainsKey(fileId))
-            {
-                RecievingFiles[fileId].CancellationTokenSource?.Cancel();
-            }
-        }
-        public void ResumeReciving(uint fileId, long startposition)
-        {
-            if (RecievingFiles.ContainsKey(fileId))
-            {
-                var file = RecievingFiles[fileId];
-                RecievingFiles.Remove(fileId);
-                StartRecievingFile(fileId, file.FileName, file.FileLength, file.FileType,file.SenderIp, startposition, file.SavedPath);
-            }
-        }
-        void OnRecieveStart(uint fileId)
-        {
-            Recieving?.Invoke(this, new FileResultEventArgs(RecievingFiles[fileId], FileResultState.Start, 0));
-        }
-        void OnRecieving(uint fileId, long position)
-        {
-            RecievingFiles[fileId].Position= position;
-            Recieving?.Invoke(this, new FileResultEventArgs(RecievingFiles[fileId], FileResultState.Updating, position));
-        }
-        void OnRecieved(uint fileId)
-        {
-            RecievingFiles[fileId].Position = RecievingFiles[fileId].FileLength;
-            Recieving?.Invoke(this, new FileResultEventArgs(RecievingFiles[fileId], FileResultState.Ending, 1));
-        }
 
-        public void SaveHistoryToDataStore(IDataStore dataStore)
+        public Task ResumeReciving(ClientMission mission)
         {
-            dataStore.Save(nameof(SendingFiles),JsonSerializer.Serialize( SendingFiles));
-            dataStore.Save(nameof(RecievingFiles), JsonSerializer.Serialize(RecievingFiles));
+            return StartRecievingFile(mission);
         }
-        public void LoadHistoryFromDataStore(IDataStore dataStore)
+        void OnRecieving(ClientMission mission,long position)
         {
-            try
-            {
-                var rjson = dataStore.Get<string>(nameof(RecievingFiles));
-                if (rjson != null)
-                {
-                    RecievingFiles = JsonSerializer.Deserialize<Dictionary<uint, RecievingFile>>(rjson) ?? RecievingFiles;
-                }
-                var sjson = dataStore.Get<string>(nameof(SendingFiles));
-                if (sjson != null)
-                {
-                    SendingFiles = JsonSerializer.Deserialize<Dictionary<uint, SendingFile>>(sjson) ?? SendingFiles;
-                }
-            }
-            catch { }
+            mission.Position=position;  
+            Recieving?.Invoke(this,mission);
         }
     }
 }

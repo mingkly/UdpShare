@@ -13,73 +13,88 @@ namespace UdpQuickShare.Clients
 {
     public class TcpFileSender:IDisposable
     {
-        TcpClient tcpClient;
-        int bufferSize;
+        readonly TcpClient tcpClient;
+        readonly int bufferSize;
         public TcpFileSender(int bufferSize)
         {
             tcpClient = new TcpClient();
             this.bufferSize = bufferSize;
         }
-        public void Log(string message) => App.Log(message);
+
         public void Dispose()
         {
             ((IDisposable)tcpClient).Dispose();
+            GC.SuppressFinalize(this);
         }
+
+        public static void Log(string message) => App.Log(message);
+
 
         public async Task<bool> SendFileAsync(Stream stream,IPEndPoint endPoint,Action<long> sending,CancellationToken cancellation, int invokeDelta = 1000)
         {
             try
             {
-                Log($"tcpclient waiting for connect");
+                TcpFileSender.Log($"tcpclient waiting for connect");
                 int tryCount = 3;
                 while (tryCount-- > 0)
                 {
                     try
                     {
                         await tcpClient.ConnectAsync(endPoint, cancellation);
+                        
                     }
-                    catch(Exception ex)
+                    catch
                     {
                         //Log($"connect ex:{ex}");
-                        Log($"{3 - tryCount} connect failed");
+                        TcpFileSender.Log($"{3 - tryCount} connect failed");
+                        await Task.Delay(2000);
                     }
                 }
                 if (tcpClient.Connected)
                 {
-                    Log($"tcpclient connected");
+                    TcpFileSender.Log($"tcpclient connected");
                 }
                 else
                 {
-                    Log($"tcpclient failed");
+                    TcpFileSender.Log($"tcpclient failed");
                     return false;
                 }
                 var buffer = new byte[bufferSize];
                 DateTime lastTime = DateTime.Now;
+                var delta = TimeSpan.FromMilliseconds(invokeDelta);
                 using (var netStream = tcpClient.GetStream())
                 {
                     int readed = 0;
                     do
                     {
                         cancellation.ThrowIfCancellationRequested();
-                        readed =await stream.ReadAsync(buffer);
-                        await netStream.WriteAsync(buffer.AsMemory(0, readed));
-                        await netStream.FlushAsync();
-                        if (DateTime.Now - lastTime > TimeSpan.FromMilliseconds(invokeDelta))
+                        readed =stream.Read(buffer);
+                        netStream.Write(buffer.AsSpan(0, readed));
+                        netStream.Flush();
+                        if (DateTime.Now - lastTime >delta)
                         {
                             sending?.Invoke(stream.Position);
                             lastTime = DateTime.Now;
                         }                     
                     }
                     while (readed > 0);
-                    Log($"tcpclient completed");
-                    return true;
+                    TcpFileSender.Log($"tcpclient completed");
                 }
+                tcpClient.Close();
+                tcpClient.Dispose();
+                return true;
+            }
+            catch(OperationCanceledException ex)
+            {
+                tcpClient.Close();
+                tcpClient.Dispose();
             }
             catch(Exception ex)
             {
-                //Log($"sending file :{ex}");
+                TcpFileSender.Log($"sending file :{ex}");
             }
-            Log($"tcpclient stopped");
+
+            TcpFileSender.Log($"tcpclient stopped");
             return false;
         }
     }

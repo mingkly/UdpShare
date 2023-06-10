@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using UdpQuickShare.FileActions;
 
@@ -11,30 +13,40 @@ namespace UdpQuickShare.Services
     {
         public T Get<T>(string key)
         {
-            return Preferences.Default.Get<T>(key,default(T));
+            try
+            {
+                var value = Preferences.Get(key, null, "MyShare");
+                if (value != null)
+                {
+                    return JsonSerializer.Deserialize<T>(value.ToString());
+                }
+            }
+            catch
+            {
+                Debug.WriteLine(key);
+            }
+
+            return default;
         }
 
         public object Get(string key, Type type)
         {
-            var value=Preferences.Default.Get<object>(key,null);
+            var value=Preferences.Get(key,null, "MyShare");
             if (value != null)
             {
-                if (type.IsAssignableFrom(value.GetType()))
-                {
-                    return value;
-                }
+                return JsonSerializer.Deserialize(value.ToString(), type);
             }
             return null;
         }
 
         public void Save(string key, object value)
         {
-            Preferences.Default.Set(key, value);
+            Preferences.Set(key, JsonSerializer.Serialize(value),"MyShare");
         }
 
         public void Save<T>(string key, T value)
         {
-            Preferences.Default.Set(key, value);
+            Preferences.Set(key,JsonSerializer.Serialize(value),"MyShare");
         }
     }
 }

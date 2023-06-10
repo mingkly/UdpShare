@@ -75,7 +75,7 @@ namespace UdpQuickShare.Protocols
         public HeadSegement DecodeHeader(ByteArrayBuffer buffer)
         {
             var fileId = buffer.ReadUInt();
-            var fileLength=buffer.ReadUInt();
+            var fileLength=buffer.ReadInt64();
             var fileTypeInt=buffer.ReadInt32();
             FileType fileType;
             try

@@ -2,14 +2,22 @@
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <IsFirstTimeProjectOpen>False</IsFirstTimeProjectOpen>
-    <ActiveDebugFramework>net6.0-windows10.0.19041.0</ActiveDebugFramework>
+    <ActiveDebugFramework>net7.0-windows10.0.19041.0</ActiveDebugFramework>
     <ActiveDebugProfile>Windows Machine</ActiveDebugProfile>
     <SelectedPlatformGroup>PhysicalDevice</SelectedPlatformGroup>
     <DefaultDevice>pixel_5_-_api_24</DefaultDevice>
     <UapAppxPackageBuildMode>SideloadOnly</UapAppxPackageBuildMode>
     <AppxShowAllApps>False</AppxShowAllApps>
-    <_LastSelectedProfileId>MSIX-win10-x642.pubxml</_LastSelectedProfileId>
+    <_LastSelectedProfileId>MSIX-win10-x647.pubxml</_LastSelectedProfileId>
     <PackageOptionalProjectsInIdeBuilds>False</PackageOptionalProjectsInIdeBuilds>
+    <Source>D:\ftpserver\PngIcon\app_icon2.png</Source>
+    <SmallTileSource>D:\ftpserver\PngIcon\app_icon2.png</SmallTileSource>
+    <MediumTileSource>D:\ftpserver\PngIcon\app_icon2.png</MediumTileSource>
+    <WideTileSource>D:\ftpserver\PngIcon\app_icon2.png</WideTileSource>
+    <LargeTileSource>D:\ftpserver\PngIcon\app_icon2.png</LargeTileSource>
+    <AppIconSource>D:\ftpserver\PngIcon\app_icon2.png</AppIconSource>
+    <SplashScreenSource>D:\ftpserver\PngIcon\app_icon2.png</SplashScreenSource>
+    <PackageLogoSource>D:\ftpserver\PngIcon\app_icon2.png</PackageLogoSource>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net6.0-android|AnyCPU'">
     <DebuggerFlavor>ProjectDebugger</DebuggerFlavor>

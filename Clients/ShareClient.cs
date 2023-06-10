@@ -1,15 +1,16 @@
 ﻿
+using MKFilePicker;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Dynamic;
 using System.Linq;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using UdpQuickShare.FileActions;
-using UdpQuickShare.FileActions.FilePickers;
 using UdpQuickShare.FileActions.FileSavers;
 using UdpQuickShare.Protocols;
 using UdpQuickShare.Services;
@@ -19,24 +20,23 @@ namespace UdpQuickShare.Clients
 {
     public class ShareClient
     {
-        MyUdpClient udpClient;
-        MyTcpClient tcpClient;
-        IPEndPoint broadcast;
-        IFileSaver fileSaver;
-        IDataStore dataStore;
-        int maxBufferSize;
+        readonly MyUdpClient udpClient;
+        readonly MyTcpClient tcpClient;
+        readonly IPEndPoint broadcast;
+        readonly IDataStore dataStore;
+        readonly int maxBufferSize;
         bool isWaitingUdp;
-        int tcpPort;
-        Dictionary<uint, HeadSegement> recievingHeads;
-        Dictionary<uint, HeadSegement> sendingHeads;
-        public event EventHandler<FileResultEventArgs> Recieving;
-        public event EventHandler<FileResultEventArgs> Sending;
-        public event EventHandler<PickFileResult> SendingError;
+
+
+
+        public event EventHandler<ClientMission> SendingError;
         public event EventHandler<DeviceNotFoundEventArgs> DeviceNotFound;
         public event EventHandler<DeviceFoundEventArgs> OnDeviceFound;
         public event EventHandler<IPEndPoint> CurrentIpChanged;
         public event EventHandler<bool> ExposedChanged;
-        public Dictionary<uint,UdpFileResult> UdpFiles { get; private set; }
+
+        public event EventHandler<ClientMission> OnMissionHandled;
+        public IList<ClientMission> Missions { get;private set; }
         TaskCompletionSource<bool> CheckForConnectionTask;
         public MyTcpClient TcpClient => tcpClient;
         public MyUdpClient UdpClient => udpClient;
@@ -53,66 +53,43 @@ namespace UdpQuickShare.Clients
                 }
             }
         }
-        public void Log(string message) => App.Log(message);
-        public ShareClient(IEncoder encoder, IDecoder decoder, IFileSaver fileSaver, IDataStore dataStore, int port, int tcpPort, int maxBufferSize)
+        public static void Log(string message) => App.Log(message);
+        public ShareClient(IEncoder encoder, IDecoder decoder, IDataStore dataStore, int port, int tcpPort, int maxBufferSize,IList<ClientMission> missions)
         {
             udpClient = new MyUdpClient(encoder, decoder, port, maxBufferSize);
-            this.tcpPort = tcpPort;
-            tcpClient = new MyTcpClient(tcpPort, maxBufferSize, ServiceFactory.CreateFilePicker(), fileSaver);
+            tcpClient = new MyTcpClient(tcpPort, maxBufferSize);
             broadcast = new IPEndPoint(IPAddress.Broadcast, port);
-            this.fileSaver = fileSaver;
             this.maxBufferSize = maxBufferSize;
             this.dataStore = dataStore;
-            tcpClient.LoadHistoryFromDataStore(dataStore);
-            recievingHeads = new Dictionary<uint, HeadSegement>();
-            sendingHeads = new Dictionary<uint, HeadSegement>();
             udpClient.CurrentIpChanged += UdpClient_CurrentIpChanged;
+
             tcpClient.Recieving += TcpClient_Recieving;
             tcpClient.Sending += TcpClient_Sending;
-            LoadUdpFiles();
+            Missions = missions;
         }
 
-        private void TcpClient_Sending(object sender, FileResultEventArgs e)
+        private void TcpClient_Sending(object sender, ClientMission e)
         {
-            Sending?.Invoke(this, e);
-            if (e.State == FileResultState.Start || e.State == FileResultState.Stop
-                || e.State == FileResultState.Ending)
-            {
-                tcpClient.SaveHistoryToDataStore(dataStore);
-            }
+            MissionUpdated(e);
         }
 
-        private void TcpClient_Recieving(object sender, FileResultEventArgs e)
+        private void TcpClient_Recieving(object sender, ClientMission e)
         {
-            if (e.State == FileResultState.Start || e.State == FileResultState.Stop
-                || e.State == FileResultState.Ending)
-            {
-                tcpClient.SaveHistoryToDataStore(dataStore);
-                Debug.WriteLine(TcpClient.RecievingFiles.First().Value.Position);
-            }
-            Recieving?.Invoke(this, e);
-            if (e.State == FileResultState.Ending)
-            {
-                ExposeThisDevice();
-            }
-
+            MissionUpdated(e);
         }
 
         private void UdpClient_CurrentIpChanged(object sender, EventArgs e)
         {
             CurrentIpChanged?.Invoke(this, udpClient.CurrentIp);
         }
-        public void SetUp()
+        public async Task SetUp()
         {
-            Task.Run(async () =>
-            {
-                await udpClient.GetOwnIp();
-                await UdpClient.SendAsync(new CommandSegement(App.DeviceName, CommandType.FoundDevice), broadcast);
-            });
+            await udpClient.GetOwnIp();
+            await UdpClient.SendAsync(new CommandSegement(App.DeviceName, CommandType.FoundDevice), broadcast);
         }
-        public void FindDevices()
+        public Task FindDevices()
         {
-            Task.Run(() => UdpClient.SendAsync(new CommandSegement(App.DeviceName, CommandType.FoundDevice), broadcast));
+            return UdpClient.SendAsync(new CommandSegement(App.DeviceName, CommandType.FoundDevice), broadcast);
         }
         public void ExposeThisDevice()
         {
@@ -141,16 +118,21 @@ namespace UdpQuickShare.Clients
             {
                 if (e.Segement is HeadSegement head)
                 {
-                    if (!recievingHeads.ContainsKey(head.FileId))
-                    {
-                        recievingHeads.Add(head.FileId, head);
-                    }
-                    Log($"recieving file head ,reply and start reciving file");
+                    ShareClient.Log($"recieving file head ,reply and start reciving file");
                     var replySegement = new ReplySegement(e.Segement.FileId);
                     await udpClient.SendAsync(replySegement, e.IP);
+                    var mission = new ClientMission(MissionType.WaitRecieving,
+                        head.FileId,
+                        head.FileName,
+                        head.FileType,
+                        head.FileLength,
+                        0,
+                        e.IP);
                     if (head.FileLength > maxBufferSize)
                     {
-                        tcpClient.StartRecievingFile(head.FileId, head.FileName, head.FileLength, head.FileType, e.IP);
+                        MissionUpdated(mission);
+                        await tcpClient.StartRecievingFile(mission);
+                        MissionUpdated(mission);
                     }
                     else
                     {
@@ -162,394 +144,258 @@ namespace UdpQuickShare.Clients
                 {
                     if (command.Command == CommandType.FoundDevice)
                     {
-                        Log($"recieve other found device command {command.Value}({e.IP}) and reply");
+                        ShareClient.Log($"recieve other found device command {command.Value}({e.IP}) and reply");
                         await udpClient.SendAsync(new CommandSegement(App.DeviceName, CommandType.DeviceReply), e.IP);
                         OnDeviceFound?.Invoke(this, new DeviceFoundEventArgs(e.IP, command.Value));
                     }
                     else if (command.Command == CommandType.DeviceReply)
                     {
-                        Log($"recieve other found device reply command {command.Value}({e.IP})");
+                        ShareClient.Log($"recieve other found device reply command {command.Value}({e.IP})");
                         OnDeviceFound?.Invoke(this, new DeviceFoundEventArgs(e.IP, command.Value));
                     }
                     else if (command.Command == CommandType.RecieverAskForResending)
                     {
-                        var position = uint.Parse(command.Value);
-                        Log($"recieve RecieverAskForResending in position {position},reply and start resend");
-                        await udpClient.SendAsync(new CommandSegement(command.FileId, "", CommandType.SenderReadyForResending), e.IP);
-                        tcpClient.Resend(command.FileId, position);
+                        if(TryGetMission(command.FileId,out var mission))
+                        {
+                            if (!mission.FileExist())
+                            {
+                                return;
+                            }
+                            var position = long.Parse(command.Value);
+                            ShareClient.Log($"recieve RecieverAskForResending in position {position},reply and start resend");
+                            await udpClient.SendAsync(new CommandSegement(command.FileId, "", CommandType.SenderReadyForResending), e.IP);
+                            mission.Position = position;
+                            await tcpClient.Resend(mission);
+                            MissionUpdated(mission);
+                        }
                     }
                     else if (command.Command == CommandType.SenderReadyForResending)
                     {
-                        var fileId = command.FileId;
-                        var position = tcpClient.RecievingFiles[fileId].Position;
-                        Log($"recieve SenderReadyForResending,start recieving in position {position}");
-                        tcpClient.ResumeReciving(fileId, position);
+                        if (TryGetMission(command.FileId, out var mission))
+                        {
+                            await tcpClient.ResumeReciving(mission);
+                            MissionUpdated(mission);
+                        }                 
                     }
                     else if (command.Command == CommandType.SenderAskForResending)
                     {
-                        var fileId = command.FileId;
-                        var position = tcpClient.RecievingFiles[fileId].Position;
-                        Log($"recieve SenderAskForResending,start recieving in position {position} and reply");
-                        tcpClient.ResumeReciving(fileId, position);
-                        await udpClient.SendAsync(new CommandSegement(command.FileId, position.ToString(), CommandType.RecieverReadyForRecieving), e.IP);
+                        if (TryGetMission(command.FileId, out var mission))
+                        {
+                            long position =mission.FileExist()? mission.Position:0;   
+                            mission.Position = position;
+                            await udpClient.SendAsync(new CommandSegement(command.FileId, position.ToString(), CommandType.RecieverReadyForRecieving), e.IP);
+                            ShareClient.Log($"recieve SenderAskForResending,start recieving in position {mission.Position} and reply");
+                            await tcpClient.ResumeReciving(mission);
+                            MissionUpdated(mission);
+                        }
                     }
                     else if (command.Command == CommandType.RecieverReadyForRecieving)
                     {
-                        var fileId = command.FileId;
-                        var position = uint.Parse(command.Value);
-                        Log($"recieve RecieverReadyForRecieving in position{position},start resending");
-                        tcpClient.Resend(fileId, position);
+                        if (TryGetMission(command.FileId, out var mission))
+                        {
+                            var position = long.Parse(command.Value);
+                            mission.Position = position;
+                            ShareClient.Log($"recieve RecieverReadyForRecieving in position{position},start resending");
+                            await tcpClient.Resend(mission);
+                            MissionUpdated(mission);
+                        }
                     }
                     else if (command.Command == CommandType.StopRecieving)
                     {
                         var fileId = command.FileId;
-                        Log($"recieve RecieverStopRecieving ,stop sending");
-                        tcpClient.StopSending(fileId);
+                        ShareClient.Log($"recieve RecieverStopRecieving ,stop sending");
+                        StopSending(fileId);
                     }
                     else if (command.Command == CommandType.CheckForConnection)
                     {
-                        Log($"recieve CheckForConnection and reply");
+                        ShareClient.Log($"recieve CheckForConnection and reply");
                         await udpClient.SendAsync(new CommandSegement("", CommandType.ConnectionNormal), e.IP);
                     }
                     else if (command.Command == CommandType.ConnectionNormal)
                     {
-                        Log($"recieve CheckForConnection reply and setresult");
+                        ShareClient.Log($"recieve CheckForConnection reply and setresult");
                         CheckForConnectionTask?.TrySetResult(true);
                     }
                 }
                 else if (isWaitingUdp && e.Segement is PartByteSegement byteSegement)
                 {
-                    var fileHead = recievingHeads[byteSegement.FileId];
-                    Log($"recieve file {fileHead.FileId}({fileHead.FileName}) from udp");
-                    var file = fileSaver.Create(fileHead.FileName, fileHead.FileLength, fileHead.FileType);
-                    file.Stream.Write(byteSegement.TotalData, byteSegement.Offset, byteSegement.Count);
-                    string textValue = null;
-                    if (fileHead.FileType == FileType.Text)
+                    if (TryGetMission(e.Segement.FileId,out var mission))
                     {
-                        textValue = Encoding.UTF8.GetString(byteSegement.TotalData, byteSegement.Offset, byteSegement.Count);
-                        InvokeEndRecievingText(fileHead.FileId, textValue);
+                        ShareClient.Log($"recieve file {mission.FileId}({mission.FileName}) from udp");
+                        var file = FileSaveManager.CreateFile(mission.FileName, mission.FileType);
+                        file.Stream.Write(byteSegement.TotalData, byteSegement.Offset, byteSegement.Count);
+                        mission.FilePath = file.Path;
+                        mission.FilePlatformPath = file.PlatformPath;                        
+                        mission.Position = mission.FileLength;
+                        mission.Type = MissionType.RecievingComleted;
+                        if (mission.FileType == FileType.Text)
+                        {
+                            var textValue = Encoding.UTF8.GetString(byteSegement.TotalData, byteSegement.Offset, byteSegement.Count);
+                            mission.Text= textValue;
+                        }
+                        using (file.Stream) { }
+                        MissionUpdated(mission);
                     }
-                    var info = new FileCreateInfo
-                    {
-                        Path = file.Path,
-                        FileType = file.FileType,
-                        Stream = file.Stream,
-                    };
-                    await fileSaver.SaveAsync(info);
-                    if (fileHead.FileType != FileType.Text)
-                    {
-                        InvokeEndRecieving(fileHead.FileId, info.Path);
-                    }
-                    AddRecievingUdpFile(new UdpFileResult
-                    {
-                        FileId = fileHead.FileId,
-                        Path = info.Path,
-                        FileLength = fileHead.FileLength,
-                        IsSending = false,
-                        FileName = fileHead.FileName,
-                        TextValue = textValue
-                    });
                     isWaitingUdp = false;
                 }
             }
             catch { }
 
         }
-        public async Task SendFileAsync(PickFileResult pickFileResult, FileType fileType, IEnumerable<IPEndPoint> targets)
+        async Task<bool> ConnectAsync(ClientMission mission)
+        {
+            if (mission.IPEndPoint == null)
+            {
+                return false;
+            }
+            var head = new HeadSegement(mission.FileName,mission.FileId,mission.FileLength,mission.FileType);
+            ShareClient.Log($"send file head and waiting for reply");
+            var (Sender, Segement) = await udpClient.SendForResultAsync(head, mission.IPEndPoint, 3000);
+            if (Segement is not ReplySegement)
+            {
+                return false;
+            }
+            return true;
+        }
+        public async Task HandleMission(ClientMission mission)
         {
             try
             {
-                uint id = (uint)pickFileResult.GetHashCode();
-
-                if (!targets.Any())
+                if (!(await ConnectAsync(mission)))
                 {
-                    Log($"send file targets empty");
-                    DeviceNotFound?.Invoke(this, new DeviceNotFoundEventArgs(null));
+                    ShareClient.Log($"reply not found");
+                    DeviceNotFound?.Invoke(this, new DeviceNotFoundEventArgs(mission.IPEndPoint));
                     return;
                 }
-                Log($"start send file {id}({pickFileResult.Name}) to {string.Join(",", targets)}");
-                if (!sendingHeads.ContainsKey(id))
+                if (mission.Type == MissionType.WaitSending)
                 {
-                    var head = new HeadSegement(pickFileResult.Name, id, (uint)pickFileResult.Length, fileType);
-                    sendingHeads.Add(id, head);
-
-                    foreach (var client in targets)
+                    var stream = mission.OpenRead();
+                    if (mission.FileLength > maxBufferSize)
                     {
-                        Log($"send file head and waiting for reply");
-                        var reply = await udpClient.SendForResultAsync(head, client, 3000);
-                        if (reply.Segement is not ReplySegement)
-                        {
-                            Log($"reply not found");
-                            DeviceNotFound?.Invoke(this, new DeviceNotFoundEventArgs(client));
-                            continue;
-                        }
-                        if (head.FileLength > maxBufferSize)
-                        {
-                            Log($"send bog file use tcp");
-                            _=tcpClient.StartSendFile(id, pickFileResult.Uri, pickFileResult.Name, client);
-                        }
-                        else
-                        {
-                            Log($"send small file use udp");
-                            //InvokeStartSending(id);
-                            pickFileResult.Stream ??= ServiceFactory.CreateFilePicker().OpenPickedFile(pickFileResult.Uri);
-                            using (pickFileResult.Stream)
-                            {
-                                var body = new StreamBodySegement(id, 0, pickFileResult.Stream, 0, (uint)pickFileResult.Length);
-                                await udpClient.SendAsync(body, client);
-                                string textValue = null;
-                                try
-                                {
-                                    if (head.FileType == FileType.Text)
-                                    {
-                                        pickFileResult.Stream.Position = 0;
-                                        using (var sr = new StreamReader(pickFileResult.Stream))
-                                        {
-                                            textValue = sr.ReadToEnd();
-                                        }
-                                    }
-                                }
-                                catch { }
-                                AddSendingUdpFile(new UdpFileResult
-                                {
-                                    FileId = id,
-                                    FileName = head.FileName,
-                                    TextValue = textValue,
-                                    FileLength = head.FileLength,
-                                    IsSending = true,
-                                    Path = pickFileResult.Uri,
-                                });
-                                if (textValue != null)
-                                {
-                                    InvokeEndSendingText(id, textValue);
-                                }
-                                else
-                                {
-                                    InvokeEndSending(id);
-                                }
-                            }
-                        }
+                        ShareClient.Log($"send bog file use tcp");
+                        MissionUpdated(mission);
+                        await tcpClient.StartSendFile(mission, stream);
+                        MissionUpdated(mission);
+                    }
+                    else
+                    {
+                        await SendUseUdp(stream, mission);
+                        MissionUpdated(mission);
                     }
                 }
             }
-            catch (Exception ex)
+            catch(Exception ex)
             {
-                SendingError?.Invoke(this, pickFileResult);
+                SendingError?.Invoke(this, mission);
             }
 
         }
-
-        public async Task SendMultiFileAsync(IEnumerable<(PickFileResult pickFileResult, FileType fileType)> files, IPEndPoint target)
+        async Task SendUseUdp(Stream stream,ClientMission mission)
         {
-            try
+            ShareClient.Log($"send small file use udp");
+            using (stream)
             {
-                Log($"start send multi files");
-                foreach (var file in files)
-                {
-                    uint id = (uint)file.pickFileResult.GetHashCode();
-                    if (target == null)
-                    {
-                        Log($"send file targets empty");
-                        DeviceNotFound?.Invoke(this, new DeviceNotFoundEventArgs(null));
-                        return;
-                    }
-                    Log($"start send file {id}({file.pickFileResult.Name}) to {target}");
-                    if (!sendingHeads.ContainsKey(id))
-                    {
-                        var head = new HeadSegement(file.pickFileResult.Name, id, (uint)file.pickFileResult.Length, file.fileType);
-                        sendingHeads.TryAdd(id, head);
-                        var client = target;
-                        Log($"send file head and waiting for reply");
-                        var reply = await udpClient.SendForResultAsync(head, client, 3000);
-                        if (reply.Segement is not ReplySegement)
-                        {
-                            Log($"reply not found");
-                            DeviceNotFound?.Invoke(this, new DeviceNotFoundEventArgs(client));
-                            continue;
-                        }
-                        if (head.FileLength > maxBufferSize)
-                        {
-                            Log($"send bog file use tcp");
-                            await tcpClient.StartSendFile(id, file.pickFileResult.Uri, file.pickFileResult.Name, client);
-                        }
-                        else
-                        {
-                            Log($"send small file use udp");
-                            //InvokeStartSending(id);
-                            file.pickFileResult.Stream ??= ServiceFactory.CreateFilePicker().OpenPickedFile(file.pickFileResult.Uri);
-                            using (file.pickFileResult.Stream)
-                            {
-                                var body = new StreamBodySegement(id, 0, file.pickFileResult.Stream, 0, (uint)file.pickFileResult.Length);
-                                await udpClient.SendAsync(body, client);
-                                string textValue = null;
-                                try
-                                {
-                                    if (head.FileType == FileType.Text)
-                                    {
-                                        file.pickFileResult.Stream.Position = 0;
-                                        using (var sr = new StreamReader(file.pickFileResult.Stream))
-                                        {
-                                            textValue = sr.ReadToEnd();
-                                        }
-                                    }
-                                }
-                                catch { }
-                                AddSendingUdpFile(new UdpFileResult
-                                {
-                                    FileId = id,
-                                    FileName = head.FileName,
-                                    TextValue = textValue,
-                                    FileLength = head.FileLength,
-                                    IsSending = true,
-                                    Path = file.pickFileResult.Uri,
-                                });
-                                if(textValue!= null )
-                                {
-                                    InvokeEndSendingText(id,textValue);
-                                }
-                                else
-                                {
-                                    InvokeEndSending(id);
-                                }                              
-                            }
-                        }
-                    }
-                }
+                var body = new StreamBodySegement(mission.FileId, 0, stream, 0, (uint)stream.Length);
+                await udpClient.SendAsync(body, mission.IPEndPoint);
+                mission.Type = MissionType.SendingCompleted;
+                mission.Position = stream.Length;
             }
-            catch (Exception ex)
-            {
-                SendingError?.Invoke(this, files.FirstOrDefault().pickFileResult);
-            }
-
         }
+
 
         public void StopSending(uint fileId)
         {
             try
             {
-                var sendingFile = tcpClient.SendingFiles[fileId];
-                Log($"stop sending file {fileId} to {sendingFile.IPEndPoint}");
-                tcpClient.StopSending(fileId);
+                if(TryGetMission(fileId,out var mission))
+                {
+                    mission.CancellationTokenSource?.Cancel();
+                    mission.Type = MissionType.WaitResumeSending;
+                    ShareClient.Log($"stop sending file {fileId} to {mission.IPEndPoint}");
+                    //MissionUpdated(mission);
+                }              
             }
             catch { }
-
         }
-        public void ResumeSending(uint fileId)
+        public Task ResumeSending(uint fileId)
         {
-            Task.Run(async () =>
+            if(TryGetMission(fileId,out var mission))
             {
-                var recieverIp = tcpClient.SendingFiles[fileId].IPEndPoint;
-                Log($"resume sending file {fileId} to {recieverIp} ");
-                await udpClient.SendAsync(new CommandSegement(fileId, "", CommandType.SenderAskForResending), recieverIp);
-            });
+                if (!mission.FileExist())
+                {
+                    SendingError?.Invoke(this, mission);
+                }
+                ShareClient.Log($"resume sending file {fileId} to {mission.IPEndPoint} ");
+                return udpClient.SendAsync(new CommandSegement(fileId, "", CommandType.SenderAskForResending), mission.IPEndPoint);
+            }
+            return Task.CompletedTask;
         }
-        public void StopRecieving(uint fileId)
+        public Task StopRecieving(uint fileId)
         {
-
             try
             {
-                tcpClient.StopRecieving(fileId);
-                var recievingFile = tcpClient.RecievingFiles[fileId];
-                Log($"stop reciving file {fileId} in position {recievingFile.Position} from {recievingFile.SenderIp} ");
-                ExposeThisDevice();
-                Task.Run(async () =>
+                if(TryGetMission(fileId,out var mission))
                 {
-
-                    await udpClient.SendAsync(new CommandSegement(fileId, "", CommandType.StopRecieving), recievingFile.SenderIp);
-                });
+                    mission.CancellationTokenSource?.Cancel();
+                    mission.Type = MissionType.WaitResumeRecieving;
+                    ShareClient.Log($"stop reciving file {fileId} in position {mission.Position} from {mission.IPEndPoint} ");
+                    return udpClient.SendAsync(new CommandSegement(fileId, "", CommandType.StopRecieving), mission.IPEndPoint);
+                }          
             }
             catch { }
-
+            return Task.CompletedTask;
         }
-        public void ResumeRecieving(uint fileId)
+        public Task ResumeRecieving(uint fileId)
         {
-            Task.Run(async () =>
+            if (TryGetMission(fileId, out var mission))
             {
-                var position = tcpClient.RecievingFiles[fileId].Position;
-                var senderIp = tcpClient.RecievingFiles[fileId].SenderIp;
-                Log($"resume reciving file {fileId} in position {position} from {senderIp} ");
-                await udpClient.SendAsync(new CommandSegement(fileId, position.ToString(), CommandType.RecieverAskForResending), senderIp);
-            });
+                long position = mission.FileExist() ? mission.Position : 0;
+                mission.Position = position;
+                ShareClient.Log($"resume reciving file {fileId} in position {mission.Position} from {mission.IPEndPoint} ");
+                return udpClient.SendAsync(new CommandSegement(fileId, mission.Position.ToString(), CommandType.RecieverAskForResending), mission.IPEndPoint);
+            }
+            return Task.CompletedTask;
         }
         public async Task<bool> CheckForConnection(IPEndPoint ip, int timeout = 1000)
         {
-            Log($"check for connection to {ip}");
+            if (CheckForConnectionTask != null)
+            {
+                return false;
+            }
+            ShareClient.Log($"check for connection to {ip}");
             CheckForConnectionTask = new TaskCompletionSource<bool>();
             await udpClient.SendAsync(new CommandSegement("", CommandType.CheckForConnection), ip);
             var t2 = Task.Delay(timeout);
             await Task.WhenAny(CheckForConnectionTask.Task, t2);
             if (CheckForConnectionTask.Task.IsCompleted)
             {
-                Log($"connection to {ip} normal");
+                ShareClient.Log($"connection to {ip} normal");
                 CheckForConnectionTask = null;
                 return true;
             }
-            Log($"connection to {ip} failed");
+            ShareClient.Log($"connection to {ip} failed");
             CheckForConnectionTask = null;
             return false;
         }
-        void InvokeStartSending(uint fileId)
+
+        void MissionUpdated(ClientMission mission, [CallerMemberName] string caller="")
         {
-            Sending?.Invoke(this, new FileResultEventArgs(sendingHeads[fileId], FileResultState.Start));
-        }
-        void InvokeEndSending(uint fileId)
-        {
-            Sending?.Invoke(this, new FileResultEventArgs(sendingHeads[fileId], FileResultState.Ending));
-        }
-        void InvokeEndSendingText(uint fileId, string text)
-        {
-            Sending?.Invoke(this, new FileResultEventArgs(sendingHeads[fileId], FileResultState.Ending)
+            if (mission.Type == MissionType.WaitResumeRecieving || mission.Type == MissionType.WaitResumeSending)
             {
-                TextValue = text
-            });
-        }
-        void InvokeStartRecieving(uint fileId)
-        {
-            Recieving?.Invoke(this, new FileResultEventArgs(recievingHeads[fileId], FileResultState.Start));
-        }
-        void InvokeEndRecieving(uint fileId, string path)
-        {
-            Recieving?.Invoke(this, new FileResultEventArgs(recievingHeads[fileId], path, FileResultState.Ending));
-        }
-        void InvokeEndRecievingText(uint fileId, string text)
-        {
-            Recieving?.Invoke(this, new FileResultEventArgs(recievingHeads[fileId], FileResultState.Ending)
-            {
-                TextValue = text
-            });
-        }
-        void AddSendingUdpFile(UdpFileResult udpFileResult)
-        {
-            UdpFiles.TryAdd(udpFileResult.FileId, udpFileResult);
-            dataStore.Save("UdpFiles", JsonSerializer.Serialize(UdpFiles));
-        }
-        void AddRecievingUdpFile(UdpFileResult udpFileResult)
-        {
-            UdpFiles.TryAdd(udpFileResult.FileId, udpFileResult);
-            dataStore.Save("UdpFiles", JsonSerializer.Serialize(UdpFiles));
-        }
-        public void SaveUdpFiles()
-        {
-            dataStore.Save("UdpFiles", JsonSerializer.Serialize(UdpFiles));
-        }
-        public void LoadUdpFiles()
-        {
-            try
-            {
-                var json = dataStore.Get<string>("UdpFiles");
-                if (json != null)
-                {
-                    UdpFiles = JsonSerializer.Deserialize<Dictionary<uint, UdpFileResult>>(json) ?? new Dictionary<uint, UdpFileResult>();
-                }
-                else
-                {
-                    UdpFiles = new Dictionary<uint, UdpFileResult>();
-                }
+                Log($"{caller} stop {mission.Type}");
             }
-            catch
-            {
-                UdpFiles = new Dictionary<uint, UdpFileResult>();
-            }         
+            
+            OnMissionHandled?.Invoke(this, mission);
         }
+        ClientMission GetMission(uint fileId)
+        {
+            return Missions.FirstOrDefault(m => m.FileId == fileId);
+        }
+        bool TryGetMission(uint fileId,out ClientMission mission)
+        {
+            mission=GetMission(fileId);
+            return mission != null;
+        }
+
     }
 }

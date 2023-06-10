@@ -9,6 +9,7 @@ namespace UdpQuickShare.FileActions.FileSavers
     public class FileCreateInfo
     {
         public string Path { get; set; }
+        public string PlatformPath { get; set; }
         public Stream Stream { get; set; }
         public FileType FileType { get; set; }
     }

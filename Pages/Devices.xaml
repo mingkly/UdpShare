@@ -8,9 +8,9 @@
     <ContentPage.BindingContext>
         <model:DevicesPageViewModel />
     </ContentPage.BindingContext>
-    <Grid RowDefinitions="3*,*,3*,*,3*"
-      ColumnDefinitions="*,4*,*">
-        <Button Text="艘寻设备"
+    <Grid RowDefinitions="3*,*,8*,*,3*"
+      ColumnDefinitions="*,7*,*">
+        <Button Text="搜寻设备"
                 x:Name="FindDevice"
                 Grid.Column="1"
                 Grid.Row="1"
@@ -25,12 +25,12 @@
                 <DataTemplate>
                     <ViewCell x:DataType="model:DeviceModel"
                               >
-                        <Grid ColumnDefinitions="8*,*"
+                        <Grid ColumnDefinitions="4*,*"
                               >
                             <Grid.GestureRecognizers>
                                 <TapGestureRecognizer Command="{Binding ChooseCommand}"/>
                             </Grid.GestureRecognizers>
-                            <Label >
+                            <Label VerticalTextAlignment="Center">
                                 <Label.FormattedText>
                                     <FormattedString>
                                         <Span Text="{Binding Name}"/>

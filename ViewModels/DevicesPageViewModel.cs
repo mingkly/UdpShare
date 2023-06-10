@@ -16,8 +16,6 @@ namespace UdpQuickShare.ViewModels
         public ObservableCollection<DeviceModel> Devices { get; set; }
         ShareClient client;
         public ICommand FindDeviceCommand { get; }
-        public ICommand ChooseDeivceCommand { get; }
-        public ICommand DeleteDeivceCommand { get; }
 
         public DevicesPageViewModel()
         {

@@ -34,7 +34,7 @@
 		<AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
 		<PackageCertificateThumbprint>0DDED7CB707505FAFF400065A07D3173CCCF849E</PackageCertificateThumbprint>
 		<AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
-		<AppxAutoIncrementPackageRevision>True</AppxAutoIncrementPackageRevision>
+		<AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
 		<AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>
 		<GenerateTestArtifacts>True</GenerateTestArtifacts>
 		<AppInstallerUri>D:\UdpShare</AppInstallerUri>
@@ -44,13 +44,7 @@
 
 	</PropertyGroup>
 	
-	<PropertyGroup Condition="$(TargetFramework.Contains('-android')) and '$(Configuration)' == 'Release'">
-		<AndroidKeyStore>True</AndroidKeyStore>
-		<AndroidSigningKeyStore>myapp.keystore</AndroidSigningKeyStore>
-		<AndroidSigningKeyAlias>key</AndroidSigningKeyAlias>
-		<AndroidSigningKeyPass>MING1998</AndroidSigningKeyPass>
-		<AndroidSigningStorePass>MING1998</AndroidSigningStorePass>
-	</PropertyGroup>
+
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net7.0-android|x64'">
 		<AndroidPackageFormat>apk</AndroidPackageFormat>
 		<AndroidEnableMultiDex>True</AndroidEnableMultiDex>
@@ -77,19 +71,23 @@
 		<DebugSymbols>True</DebugSymbols>
 		<PublishTrimmed>True</PublishTrimmed>
 		<AndroidCreatePackagePerAbi>True</AndroidCreatePackagePerAbi>
-		<AndroidLinkTool>r8</AndroidLinkTool>
 	</PropertyGroup>
 	
 	<PropertyGroup>
-	  <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net6.0-windows10.0.19041.0</TargetFrameworks>
+	  <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net7.0-windows10.0.19041.0</TargetFrameworks>
 	  <PlatformTarget>AnyCPU</PlatformTarget>
 	  <EnforceCodeStyleInBuild>False</EnforceCodeStyleInBuild>
 	  <DefaultLanguage>zh-cn</DefaultLanguage>
+	  <PackageIcon>app_icon2.png</PackageIcon>
 	</PropertyGroup>
 	
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net7.0-android|AnyCPU'">
 	  <AndroidPackageFormat>apk</AndroidPackageFormat>
 	  <RunAOTCompilation>False</RunAOTCompilation>
+	  <AndroidCreatePackagePerAbi>True</AndroidCreatePackagePerAbi>
+	  <AndroidEnableMultiDex>True</AndroidEnableMultiDex>
+	  <AndroidLinkTool>r8</AndroidLinkTool>
+	  <TrimMode>link</TrimMode>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -147,6 +145,8 @@
 	
 	<ItemGroup>
 	  <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.0" />
+	  <PackageReference Include="MKFilePicker" Version="1.0.1" />
+	  <PackageReference Include="MKFileSaver" Version="1.0.1" />
 	</ItemGroup>
 	<ItemGroup>
 	  <MauiXaml Update="Pages\Devices.xaml">
@@ -167,5 +167,15 @@
 	</ItemGroup>
 	<ItemGroup>
 	  <ProguardConfiguration Include="Platforms\Android\r8.cfg" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Folder Include="Platforms\Android\Services\" />
+	  <Folder Include="Platforms\Windows\Services\" />
+	</ItemGroup>
+	<ItemGroup>
+	  <None Include="..\..\ftpserver\PngIcon\app_icon2.png">
+	    <Pack>True</Pack>
+	    <PackagePath>\</PackagePath>
+	  </None>
 	</ItemGroup>
 </Project>

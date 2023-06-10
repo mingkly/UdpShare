@@ -5,6 +5,12 @@
              xmlns:model="clr-namespace:UdpQuickShare.ViewModels"
              Title="SaveFolderSetter">
     <VerticalStackLayout>
+        <HorizontalStackLayout>
+            <Label Text="使用直接路径(安卓速度更快)"/>
+            <Switch x:Name="UseDirectPathSwitch"
+                    Toggled="Switch_Toggled"/>
+        </HorizontalStackLayout>
+
         <ListView ItemTapped="Folders_ItemTapped"
                   RowHeight="80"
                   HeightRequest="1000"

@@ -15,26 +15,33 @@ namespace UdpQuickShare.Clients
 {
     public class MyUdpClient
     {
-        UdpClient udpClient;
-        IEncoder encoder;
-        IDecoder decoder;
-        ByteArrayBuffer sendBuffer;
+        readonly UdpClient udpClient;
+        readonly IEncoder encoder;
+        readonly IDecoder decoder;
+        readonly ByteArrayBuffer sendBuffer;
+
         IPEndPoint currentIp;
-        int port;
-        bool KeepRecieving;
+        readonly int port;
+
+
+
         public IPEndPoint CurrentIp=>currentIp;
         public event EventHandler CurrentIpChanged;
         public event EventHandler<UdpRecievedEventArgs> OnRecieved;
-        Queue<UdpReceiveResult> recieveQueue;
+
+        bool keepRecieving;
+        readonly Queue<UdpReceiveResult> recieveQueue;
         bool queueRunning;
+        readonly object addQueueLock=new();
+
         TaskCompletionSource<(IPEndPoint Sender, ISegement Segement)> recieveTask;
 
-
-        void Log(string message)
+        static void Log(string message)
         {
             App.Log(message);
         }
-        void Log(object value)
+
+        static void Log(object value)
         {
             App.Log(value);
         }
@@ -59,7 +66,7 @@ namespace UdpQuickShare.Clients
                 }
                 var timeout = DateTime.Now.AddSeconds(10);
                 var value = new Random().Next(0, 128);
-                Log($"start get own ip");
+                MyUdpClient.Log($"start get own ip");
                 while (DateTime.Now < timeout)
                 {
                     for (int i = 0; i < 5; i++)
@@ -70,7 +77,7 @@ namespace UdpQuickShare.Clients
                     if (res.Buffer.Length == 1 && res.Buffer[0] == value)
                     {
                         currentIp = res.RemoteEndPoint;
-                        Log($"get own ip {res.RemoteEndPoint} successfully");
+                        MyUdpClient.Log($"get own ip {res.RemoteEndPoint} successfully");
                         CurrentIpChanged?.Invoke(this,new EventArgs());
                         return true;
                     }
@@ -78,48 +85,51 @@ namespace UdpQuickShare.Clients
             }
             catch(Exception e)
             {
-                Log(e);
+                MyUdpClient.Log(e);
             }
-            Log($"not get own ip");
+            MyUdpClient.Log($"not get own ip");
             return false;
         }
+
+
         public void StartRecieving()
         {
-            KeepRecieving = true;
+            keepRecieving = true;
             Task.Run(async () =>
             {
-                Log($"keep recieing in udp client start");
-                while(KeepRecieving)
+                MyUdpClient.Log($"keep recieing in udp client start");
+                while(keepRecieving)
                 {
                     try
                     {
-                        using (var source = new CancellationTokenSource())
+                        using var source = new CancellationTokenSource();
+                        source.CancelAfter(10000);
+                        var res = await udpClient.ReceiveAsync(source.Token);
+                        if (res.RemoteEndPoint.Equals(currentIp))
                         {
-                            source.CancelAfter(10000);
-                            var res = await udpClient.ReceiveAsync(source.Token);
-                            if (res.RemoteEndPoint.Equals(currentIp))
-                            {
-                                continue;
-                            }
-                            else
-                            {
-                                AddToQueue(res);
-                            }
+                            continue;
+                        }
+                        else
+                        {
+                            AddToQueue(res);
                         }
                     }
                     catch { }
                 }
-                Log($"stop keep recieing in udp client");
+                MyUdpClient.Log($"stop keep recieing in udp client");
             });
         }
 
         void AddToQueue(UdpReceiveResult udpReceiveResult)
         {
-            recieveQueue.Enqueue(udpReceiveResult);
-            if(!queueRunning)
+            lock(addQueueLock)
             {
-                queueRunning = true;
-                RunQueue();
+                recieveQueue.Enqueue(udpReceiveResult);
+                if (!queueRunning)
+                {
+                    queueRunning = true;
+                    RunQueue();
+                }
             }
         }
         void RunQueue()
@@ -139,11 +149,11 @@ namespace UdpQuickShare.Clients
                         }
                         if(segement is CommandSegement command)
                         {
-                            Log($"recieve commmand:{command.Command}-{command.Value} from {res.RemoteEndPoint}");
+                            MyUdpClient.Log($"recieve commmand:{command.Command}-{command.Value} from {res.RemoteEndPoint}");
                         }
                         else
                         {
-                            Log($"recieve segement:{segement.GetType().Name} from {res.RemoteEndPoint}");
+                            MyUdpClient.Log($"recieve segement:{segement.GetType().Name} from {res.RemoteEndPoint}");
                         }
                         OnRecieved?.Invoke(this, new UdpRecievedEventArgs(res.RemoteEndPoint, segement));
                     }
@@ -153,7 +163,7 @@ namespace UdpQuickShare.Clients
         }
         public void StopRecieving()
         {
-            KeepRecieving= false;
+            keepRecieving= false;
         }
         public Task SendAsync(ISegement segement,IPEndPoint endPoint, [CallerMemberName] string caller = "")
         {
@@ -163,25 +173,25 @@ namespace UdpQuickShare.Clients
                 encoder.Encode(sendBuffer, segement);
                 if (segement is CommandSegement command)
                 {
-                    Log($"send commmand:{command.Command}-{command.Value} to {endPoint}");
+                    MyUdpClient.Log($"send commmand:{command.Command}-{command.Value} to {endPoint}");
                 }
                 else
                 {
-                    Log($"send {segement.GetType().Name} FileId : {segement.FileId} to {endPoint}");
+                    MyUdpClient.Log($"send {segement.GetType().Name} FileId : {segement.FileId} to {endPoint}");
                 }
                 return udpClient.SendAsync(sendBuffer.Data, sendBuffer.Count, endPoint);
             }
             catch (Exception e)
             {
-                Log($"{caller} Send {segement.GetType()} FileId : {segement.FileId} to {endPoint} error:{e}");
+                MyUdpClient.Log($"{caller} Send {segement.GetType()} FileId : {segement.FileId} to {endPoint} error:{e}");
             }
             return Task.CompletedTask;
         }
 
-        public async Task<(IPEndPoint Sender,ISegement Segement)> SendForResultAsync(ISegement segement, IPEndPoint endPoint,int timeout = 1000, [CallerMemberName] string caller="")
+        public async Task<(IPEndPoint Sender,ISegement Segement)> SendForResultAsync(ISegement segement, IPEndPoint endPoint,int timeout = 1000)
         {
             int tryCount = 3;
-            Log($"start send for result");
+            MyUdpClient.Log($"start send for result");
             while (tryCount-- > 0)
             {          
                 await SendAsync(segement, endPoint);
@@ -192,15 +202,15 @@ namespace UdpQuickShare.Clients
                 if (taskSource.Task.IsCompleted)
                 {
                     var segement0 = taskSource.Task.Result.Segement;
-                    Log($"get result for send {segement0?.SegementType}[{segement0?.FileId}] from {taskSource.Task.Result.Sender}");
+                    MyUdpClient.Log($"get result for send {segement0?.SegementType}[{segement0?.FileId}] from {taskSource.Task.Result.Sender}");
                     return taskSource.Task.Result;
                 }
                 else
                 {
-                    Log($"{3 - tryCount} times timeout");
+                    MyUdpClient.Log($"{3 - tryCount} times timeout");
                 }
             }
-            Log($"send for result not get result");
+            MyUdpClient.Log($"send for result not get result");
             return (null, null);
         }
     }

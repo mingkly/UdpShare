@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -40,6 +41,15 @@ namespace UdpQuickShare.Protocols
         {
             WriteInt32((uint)value);
         }
+        public void WriteInt64(long value)
+        {
+            int length = 8;
+            for (int i = 0; i < length; i++)
+            {
+                data[position + i] = (byte)(value >> 8 * i);
+            }
+            position += length;
+        }
         public int ReadInt32()
         {
             int length = 4;
@@ -50,6 +60,23 @@ namespace UdpQuickShare.Protocols
             }
             position+= length;
             return value;
+        }
+        public long ReadInt64()
+        {
+            long fisrt = ReadUInt();
+            long second=ReadUInt();
+            return fisrt + second * ((long)uint.MaxValue+1);
+            /*
+            int length = 8;
+            long value = 0;
+            for (int i = 0; i < length; i++)
+            {
+                var temp = ((long)data[position + i])*(long)Math.Pow(2,8*i); 
+                value += temp;
+            }
+            position += length;
+            return value;
+            */
         }
         public uint ReadUInt()
         {

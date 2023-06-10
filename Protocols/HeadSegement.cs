@@ -11,11 +11,11 @@ namespace UdpQuickShare.Protocols
     {
         public SegementType SegementType { get; }
         public string FileName { get; }
-        public uint FileLength { get; }
+        public long FileLength { get; }
         public uint FileId { get; }
         public FileType FileType { get; }
 
-        public HeadSegement(string fileName,uint fileId,uint fileLength,FileType fileType)
+        public HeadSegement(string fileName,uint fileId,long fileLength,FileType fileType)
         {
             SegementType = SegementType.Head;
             FileName = fileName;

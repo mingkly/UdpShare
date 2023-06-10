@@ -13,26 +13,29 @@ namespace UdpQuickShare.Clients
 {
     public class TcpFileReciever
     {
-        TcpListener tcpListener;
-        int bufferSize;
+        readonly TcpListener tcpListener;
+        readonly int bufferSize;
         public TcpFileReciever(int bufferSize,int port)
         {
             tcpListener = new TcpListener(IPAddress.Any, port);
 
             this.bufferSize = bufferSize;
         }
-        public void Log(string message)=>App.Log(message);
+        public static void Log(string message)=>App.Log(message);
 
 
-        public async Task<bool> RecievingFile(Stream stream,Action<long> recieving,CancellationToken cancellationToken,int invokeDelta=1000)
+        public async Task<(bool CompletedNormal,long Readed)> RecievingFile(Stream stream,Action<long> recieving,CancellationToken cancellationToken,int invokeDelta=1000,long startPosition=0)
         {
+            long totalReaded = startPosition;
             try
             {
-                Log($"tcpclient waiting for connect");
+                TcpFileReciever.Log($"tcpclient waiting for connect");
                 tcpListener.Start();
-                var client = await tcpListener.AcceptTcpClientAsync(cancellationToken);
-                Log($"tcpclient connected");
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,new CancellationTokenSource(6000).Token);
+                var client = await tcpListener.AcceptTcpClientAsync(cts.Token);
+                TcpFileReciever.Log($"tcpclient connected");
                 var buffer = new byte[bufferSize];
+
                 if (client != null)
                 {
                     int readed;
@@ -41,28 +44,29 @@ namespace UdpQuickShare.Clients
                     do
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        readed = await netStream.ReadAsync(buffer);
-                        await stream.WriteAsync(buffer.AsMemory().Slice(0,readed));
+                        readed = netStream.Read(buffer);
+                        totalReaded += readed;
+                        stream.Write(buffer.AsSpan(0,readed));
                         if (DateTime.Now - lastTime > TimeSpan.FromMilliseconds(invokeDelta))
                         {
-                            recieving?.Invoke(stream.Position);
+                            recieving?.Invoke(totalReaded);
                             lastTime=DateTime.Now;
-                        }                      
+                        }
                     } while (readed > 0);
                     tcpListener.Stop();
-                    Log($"tcpclient completed");
-                    return true;
+                    TcpFileReciever.Log($"tcpclient completed");
+                    return (true,totalReaded);
                 }
 
             }
             catch(Exception ex)
             {
-
-                //Log($"recieve: {ex}");
+                TcpFileReciever.Log($"recieve: {ex}");
             }
-            Log($"tcpclient stopped");
+            TcpFileReciever.Log($"tcpclient stopped");
             tcpListener.Stop();
-            return false;
+            
+            return (false,totalReaded);
         }
     }
 }

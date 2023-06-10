@@ -1,14 +1,15 @@
 ﻿
+using MKFilePicker;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using UdpQuickShare.Clients;
 using UdpQuickShare.FileActions;
-using UdpQuickShare.FileActions.FileSavers;
 using UdpQuickShare.Pages;
 using UdpQuickShare.Protocols;
 using UdpQuickShare.Services;
@@ -24,10 +25,10 @@ public partial class App : Application
     
     public ObservableCollection<FileItem> Files { get; private set; }
     public ObservableCollection<FileItem> SendingFiles { get; private set; }
-    public static IFileSaver FileSaver { get; private set; }
+
+    public ObservableCollection<ClientMission> Missions { get; private set; }
     public static IDataStore DataStore { get; private set; }
-    public  Dictionary<uint, string> PickedFiles { get; private set; }
-    public ObservableCollection<DeviceModel> Devices { get; private set; }
+    public DeviceManager DeviceManager { get; }
     bool sendingOrRecieving;
     public bool SendingOrRecieving
     {
@@ -41,8 +42,6 @@ public partial class App : Application
             }
         }
     }
-
-    public event EventHandler SendingDeviceChanged;
     public event EventHandler<bool> SendingOrRecievingChanged;
     public static readonly int BufferSize = 1024;
     public static readonly int UdpPort = 4321;
@@ -55,28 +54,39 @@ public partial class App : Application
         InitializeComponent();
         MainPage = new AppShell();
         Messages = new ObservableCollection<string>();
-        DataStore = new PreferenceDataStore();
-        FileSaver = ServiceFactory.CreateFileSaver();
+        DataStore = new FileDataStore();
+        FileSaveManager.DataStore = DataStore;
         var encoder = new DefaultEncoder();
         var decoder = new DefaultDecoder();
-        Client = new ShareClient(encoder, decoder, FileSaver, DataStore, UdpPort, TcpPort, BufferSize);
         LoadFileFromClient();
-        LoadDevice();
-        Client.Recieving += Client_Recieving;
-        Client.Sending += Client_Sending;
-        Client.OnDeviceFound += Client_OnDeviceFound;
-        Client.DeviceNotFound += Client_DeviceNotFound;
+        Client = new ShareClient(encoder, decoder,  DataStore, UdpPort, TcpPort, BufferSize,Missions);
+        DeviceManager=new DeviceManager(DataStore, Client,this);
+
+        LoadUseDirectPath(DataStore);
+        DeviceManager.LoadDevice();
+        Client.OnMissionHandled += Client_OnMissionHandled;
         Instance = this;
-        Client.SetUp();
-        Client.ExposeThisDevice();
+        Client.SendingError += Client_SendingError;
     }
+
+
+
+    private void Client_SendingError(object sender, ClientMission e)
+    {
+        DisplayAlert("错误", $"{e.FileName}-{e.FilePlatformPath}-{e.FilePath}");
+    }
+
     protected override void OnResume()
     {
         base.OnResume();
         opened = false;
         
     }
-
+    void LoadUseDirectPath(IDataStore dataStore)
+    {
+        var useDirectPath = dataStore.Get<bool>("UseDirectPath");
+        FileManager.UseDirectPath = useDirectPath;
+    }
     #region Messages
     static void MessagesAdd(string message)
     {
@@ -84,7 +94,7 @@ public partial class App : Application
         {
             MainThread.BeginInvokeOnMainThread(() => Messages.Insert(0,message));
         }
-        catch(Exception ex)
+        catch
         {
             //Messages.Add(message);
             //Log(ex);
@@ -93,139 +103,87 @@ public partial class App : Application
     }
     public static void Log(string message)
     {
-        // MessagesAdd(message);
-        //Debug.WriteLine(message);
+
+#if DEBUG
+        MessagesAdd(message);
+        Debug.WriteLine(message);
+#endif
+
     }
     public static void Log(object value)
     {
-        //Debug.WriteLine(value);
+#if DEBUG
+        Debug.WriteLine(value);
+#endif
     }
     #endregion
     #region Devices
-    void LoadDevice()
-    {
-        Devices = DeserilizeDevice(DataStore.Get<string>(nameof(Devices))) ?? new ObservableCollection<DeviceModel>();
-        foreach(var device in Devices)
-        {
-            Log($"{device.Name}-{device.SendThis}");
-        }
-    }
-    public void AddOrUpdateDevice(string deviceName, IPEndPoint ip, bool sendThis)
-    {
-        var existed = Devices.FirstOrDefault(x => x.Ip.Equals(ip));
-        var hasSendDevice = Devices.Count(x => x.SendThis) >=1;
-        if (existed == null)
-        {
-            Devices.Add(new DeviceModel(this)
-            {
-                Ip = ip,
-                Name = deviceName,
-                SendThis = !hasSendDevice,
-            });
-        }
-        else
-        {
-            existed.Name = deviceName;
-            existed.SendThis = sendThis&&!hasSendDevice;
-        }
-        DataStore.Save(nameof(Devices), SerilizeDevice(Devices));
-        SendingDeviceChanged?.Invoke(Devices, EventArgs.Empty);
-    }
-    public bool DeleteDevice(IPEndPoint ip)
-    {
-        var existed = Devices.FirstOrDefault(x => x.Ip.Equals(ip));
-        if (existed != null)
-        {
-            Devices.Remove(existed);
-            DataStore.Save(nameof(Devices), SerilizeDevice(Devices));
-            SendingDeviceChanged?.Invoke(Devices, EventArgs.Empty);
-            Log($"Device {existed.Name}({existed.Ip}) deleted success");
-            return true;
-        }
-        return false;
-    }
-    internal void ChooseDevice(IPEndPoint ip)
-    {
-        foreach (var m in Devices)
-        {
-            m.SendThis = false;
-        }
-        var deviceModel = Devices.FirstOrDefault(m => m.Ip.Equals(ip));
-        if (deviceModel == null)
-        {
-            return;
-        }
-        Task.Run(async () =>
-        {
-            var connected = await Client.CheckForConnection(deviceModel.Ip, 3000);
-            if (connected)
-            {
-                deviceModel.SendThis = true;
-                AddOrUpdateDevice(deviceModel.Name, deviceModel.Ip, deviceModel.SendThis);
-                DisplayAlert("设备连接正常", "", "确定");
-            }
-            else
-            {
-                DisplayAlert("设备连接错误", "", "确定");
-            }
-        });
-    }
-    private void Client_DeviceNotFound(object sender, DeviceNotFoundEventArgs e)
-    {
-        var target = Devices.FirstOrDefault(d => d.Ip.Equals(e.IP));
-        if(target == null)
-        {
-            DisplayAlert("警告", $"为连接设备");
-        }
-        else
-        {
-            DisplayAlert("警告", $"未找到设备{target.Name}({target.Ip})");
-        }
-        
-    }
-    private void Client_OnDeviceFound(object sender, DeviceFoundEventArgs e)
-    {
-        AddOrUpdateDevice(e.DeviceName, e.Ip, true);
-    }
-    static string SerilizeDevice(ObservableCollection<DeviceModel> devices)
-    {
-        return JsonSerializer.Serialize(devices);
-    }
-    static ObservableCollection<DeviceModel> DeserilizeDevice(string devices)
-    {
-        try
-        {
-            if (devices == null)
-            {
-                return null;
-            }
-            return JsonSerializer.Deserialize<ObservableCollection<DeviceModel>>(devices);
-        }
-        catch { }
-        return null;
-    }
-
+    public void AddOrUpdateDevice(string deviceName, IPEndPoint ip, bool sendThis)=> DeviceManager.AddOrUpdateDevice(deviceName, ip, sendThis);
+    public bool DeleteDevice(IPEndPoint ip)=> DeviceManager.DeleteDevice(ip);
+    internal void ChooseDevice(IPEndPoint ip)=>DeviceManager.ChooseDevice(ip);
     #endregion
 
     #region MainPageAction
+    static FilePickerFileType[] FilePickerFileTypes = new FilePickerFileType[]
+    {
+        new FilePickerFileType(new Dictionary<DevicePlatform,IEnumerable<string>>
+        {
+            {DevicePlatform.Android,new string[]{"image/*"} },
+            {DevicePlatform.WinUI,new string[]{"*.png", "*.jpg", "*.jpeg", "*.webp" } }
+        }),
+        new FilePickerFileType(new Dictionary<DevicePlatform,IEnumerable<string>>
+        {
+            {DevicePlatform.Android,new string[]{"audio/*"} },
+            {DevicePlatform.WinUI,new string[]{ "*.mp3", "*.wav", "*.flac", "*.m4a", } }
+        }),
+        new FilePickerFileType(new Dictionary<DevicePlatform,IEnumerable<string>>
+        {
+            {DevicePlatform.Android,new string[]{"video/*"} },
+            {DevicePlatform.WinUI,new string[]{ "*.mp4", "*.rmvb", "*.mkv", "*.3gp", "*.wmv", "*.mov"} }
+        }),
+        new FilePickerFileType(new Dictionary<DevicePlatform,IEnumerable<string>>
+        {
+            {DevicePlatform.Android,new string[]{"*/*"} },
+            {DevicePlatform.WinUI,new string[]{ "" } }
+        }),
+        new FilePickerFileType(new Dictionary<DevicePlatform,IEnumerable<string>>
+        {
+            {DevicePlatform.Android,new string[]{"text/*","application/*"} },
+            {DevicePlatform.WinUI,new string[]{ "*.txt","*.csv", "*.lrc", "*.srt", "*.ass", } }
+        }),
+    };
+    static FilePickOptions MapFilePickOptions(FileType fileType)
+    {
+        var option = new FilePickOptions();
+        option.FileTypes = FilePickerFileTypes[(int)fileType];
+        return option;
+    }
+
     public async Task SendFile(FileType fileType)
     {
         Log($"start pick file of {fileType}");
-        var res = await ServiceFactory.CreateFilePicker().PickFileAsync(fileType);
+        var res = await MKFilePicker.MKFilePicker.PickFileAsync(MapFilePickOptions(fileType));
         if(res == null)
         {
             Log($"pick file cancelled");
             return;
         }
-        Log($"file [{res.Name}] in [{res.Uri}] picked");
-
-        _ = Client.SendFileAsync(res, GetFileTypeByFileName(res.Name), Devices.Where(d => d.SendThis).Select(d => d.Ip)).ConfigureAwait(false);
+        Log($"file [{res.FileName}] in [{res.FullPath}] picked");
+        var mission = new ClientMission(MissionType.WaitSending,
+            (uint)res.GetHashCode(),
+            res.FileName,
+            res.FullPath,
+            res.PlatformPath,
+            GetFileTypeByFileName(res.FileName),
+            0,
+            DeviceManager.SendingDeviceIP);
+        _ = Client.HandleMission(mission);
     }
     public async Task SendMultiFile()
     {
         Log($"start pick files");
-        var ress = await ServiceFactory.CreateFilePicker().PickFilesAsync(FileActions.FileType.Any);
-        if(ress == null)
+        var ress = await MKFilePicker.MKFilePicker.PickFilesAsync(MapFilePickOptions(FileType.Any));
+        if (ress == null)
         {
             Log($"pick files cancelled");
             return;
@@ -233,67 +191,62 @@ public partial class App : Application
         Log($"{ress.Count()} files picked");
         _ = Task.Run(async () =>
         {
-            var targetDevice = Devices.Where(d => d.SendThis).Select(d => d.Ip).FirstOrDefault();
-            if (targetDevice != null)
+            foreach(var res in ress)
             {
-                var files = ress.Select(r => (r, GetFileTypeByFileName(r.Name)));
-                await Client.SendMultiFileAsync(files, targetDevice);
-            }          
-        }).ConfigureAwait(false);
+                var mission = new ClientMission(MissionType.WaitSending,
+                    (uint)res.GetHashCode(),
+                    res.FileName,
+                    res.FullPath,
+                    res.PlatformPath,
+                    GetFileTypeByFileName(res.FileName),
+                    0,
+                    DeviceManager.SendingDeviceIP);
+                await Client.HandleMission(mission);
+                await Task.Delay(1000);
+            }      
+        });
     }
     public Task SendText(string text)
     {
         Log($"start sending text :\"{text}\"");
-        var buffer = Encoding.UTF8.GetBytes(text);
-        var stream = new MemoryStream(buffer);
-        _ = Client.SendFileAsync(new FileActions.FilePickers.PickFileResult()
-        {
-            Name = $"文本{Guid.NewGuid()}.txt",
-            Length = buffer.Length,
-            Stream = stream,
-        }, FileType.Text, Devices.Where(d => d.SendThis).Select(d => d.Ip)).ConfigureAwait(false);
+        var mission = new ClientMission(text, DeviceManager.SendingDeviceIP);
+        _ = Client.HandleMission(mission);
         return Task.CompletedTask;
     }
     public Task ChooseDevice()
     {
         var diction = new Dictionary<string, object>
             {
-                { nameof(Devices), Devices },
+                { nameof(Devices), DeviceManager.Devices },
                 {"Client",Client }
             };
         return Shell.Current.GoToAsync("ChooseDevice", true, diction);
     }
-    #endregion
+#endregion
 
     #region RecievingFiles
     public void RemoveRecievingFile(uint fileId)
     {
-        if (Client.UdpFiles.ContainsKey(fileId))
-        {
-            Client.UdpFiles.Remove(fileId);
-            Client.SaveUdpFiles();
-        }
-        else if (Client.TcpClient.RecievingFiles.ContainsKey(fileId))
+        var target = Missions.FirstOrDefault(m => m.FileId == fileId);      
+        if (target!=null)
         {
             Client.StopRecieving(fileId);
-            Client.TcpClient.RecievingFiles.Remove(fileId);
-            Client.TcpClient.SaveHistoryToDataStore(DataStore);
+            Missions.Remove(target);
+            SaveFiles();
         }
-        var target = Files.FirstOrDefault(s => s.FileId == fileId);
-        Files.Remove(target);
-        Log($"recieving file {fileId}({target.Name}) deleted");
+        var target2 = Files.FirstOrDefault(s => s.FileId == fileId);
+        Files.Remove(target2);
+        Log($"recieving file {fileId}({target2.Name}) deleted");
     }
     public void ClearRecievingFile()
     {
-        Client.TcpClient.RecievingFiles.Clear();
-        var targets = Client.UdpFiles.Where(t => !t.Value.IsSending).ToArray();
+        var targets = Missions.Where(m => !IsSendingFile(m)).ToArray();
         foreach (var target in targets)
         {
-            Client.UdpFiles.Remove(target.Key);
+            Missions.Remove(target);
         }
-        Client.SaveUdpFiles();
+        SaveFiles();
         Files.Clear();
-        Client.TcpClient.SaveHistoryToDataStore(DataStore);
         Log($"recieving file cleared");
     }
     public async Task OpenRecievedFile(FileItem fileItem)
@@ -322,11 +275,12 @@ public partial class App : Application
             DisplayAlert("不支持", "");
         }
     }
-    public Task InfoReciveFile(FileItem fileItem)
+    public static Task InfoReciveFile(FileItem fileItem)
     {
+        Log(fileItem.Path);
         return Task.CompletedTask;
     }
-    public async Task CopyText(FileItem fileItem)
+    public static async Task CopyText(FileItem fileItem)
     {
         if(fileItem.Description!= null)
         {
@@ -356,33 +310,27 @@ public partial class App : Application
     #region SendingFiles
     public void RemoveSendingFile(uint fileId)
     {
-        if (Client.UdpFiles.ContainsKey(fileId))
+        var target = Missions.FirstOrDefault(m => m.FileId == fileId);
+        if (target != null)
         {
-            Client.UdpFiles.Remove(fileId);
-            Client.SaveUdpFiles();
+            Client.StopRecieving(fileId);
+            Missions.Remove(target);
+            SaveFiles();
         }
-        else if (Client.TcpClient.SendingFiles.ContainsKey(fileId))
-        {
-            Client.StopSending(fileId);
-            Client.TcpClient.SendingFiles.Remove(fileId);
-            Client.TcpClient.SaveHistoryToDataStore(DataStore);
-        }
-        var target = SendingFiles.FirstOrDefault(s => s.FileId == fileId);
-        SendingFiles.Remove(target);
-        Log($"sebding file {fileId}({target.Name}) deleted");
+        var target2 = SendingFiles.FirstOrDefault(s => s.FileId == fileId);
+        SendingFiles.Remove(target2);
+        Log($"sending file {fileId}({target2.Name}) deleted");
     }
     public void ClearSendingFile()
     {
-        Client.TcpClient.SendingFiles.Clear();
-        var targets=Client.UdpFiles.Where(t=>t.Value.IsSending).ToArray();
+        var targets = Missions.Where(m => IsSendingFile(m)).ToArray();
         foreach (var target in targets)
         {
-            Client.UdpFiles.Remove(target.Key);
+            Missions.Remove(target);
         }
-        Client.SaveUdpFiles() ;
+        SaveFiles();
         SendingFiles.Clear();
-        Client.TcpClient.SaveHistoryToDataStore(DataStore);
-        Log($"sebding file cleared");
+        Log($"sending file cleared");
     }
     public void StopOrResumeSendingFile(FileItem fileItem)
     {
@@ -399,126 +347,180 @@ public partial class App : Application
 
     void LoadFileFromClient()
     {
+        try
+        {
+            Missions = DataStore.Get<ObservableCollection<ClientMission>>(nameof(Missions))??new ObservableCollection<ClientMission>();
+        }
+        catch
+        {
+            Missions = new ObservableCollection<ClientMission>();
+        }
         Files = new ObservableCollection<FileItem>();
         SendingFiles = new ObservableCollection<FileItem>();
-        if (Client.TcpClient.RecievingFiles.Any())
+        if (Missions.Any())
         {
-            foreach (var file in Client.TcpClient.RecievingFiles)
+            foreach (var file in Missions.OrderByDescending(m=>m.CreateTime))
             {
-                var item = new FileItem(this, false)
+                var item = ConvertToFileItem(file);
+                Debug.WriteLine($"{file.Position}-{item.Percent}");
+                if (item.IsSendingFile)
                 {
-                    FileId = file.Value.FileId,
-                    Name = file.Value.FileName,
-                    Length = file.Value.FileLength,
-                    Path=file.Value.SavedPath,
-                    CreateTime=file.Value.CreateTime,
-                    Percent = (double)file.Value.Position / file.Value.FileLength,
-                };
-                if (item.Percent == 0)
-                {
-                    item.State = FileItemState.Waiting;
-                }
-                else if (item.Percent >= 1)
-                {
-                    item.State = FileItemState.Completed;
+                    SendingFiles.Add(item);
                 }
                 else
                 {
-                    item.State = FileItemState.Stopped;
+                    Files.Add(item);
                 }
-                Debug.WriteLine($"{file.Value.Position}-{item.Percent}");
-                Files.Add(item);
             }
         }
-        if (Client.TcpClient.SendingFiles.Any())
+    }
+    void SaveFiles()
+    {
+        //Log($"missions:{string.Join(",", Missions.Select(s => s.FileName))}");
+        DataStore.Save(nameof(Missions), Missions);
+    }
+    void TryAddMission(ClientMission mission)
+    {
+        if (Missions.FirstOrDefault(a => a.FileId == mission.FileId) == null)
         {
-            foreach (var file in Client.TcpClient.SendingFiles)
-            {
-                var item = new FileItem(this, true)
-                {
-                    FileId = file.Value.FileId,
-                    Name = file.Value.FileName,
-                    Length = file.Value.FileLength,
-                    IsSendingFile = true,
-                    Path=file.Value.FilePath,
-                    CreateTime = file.Value.CreateTime,
-                    Percent = (double)file.Value.Position / file.Value.FileLength,
-                };
-                if (item.Percent == 0)
-                {
-                    item.State = FileItemState.Waiting;
-                }
-                else if (item.Percent >= 1)
-                {
-                    item.State = FileItemState.Completed;
-                }
-                else
-                {
-                    item.State = FileItemState.Stopped;
-                }
-                SendingFiles.Add(item);
-            }
+            Missions.Add(mission);
+            SaveFiles();
         }
-        if (Client.UdpFiles.Any())
+    }
+    static bool IsSendingFile(ClientMission file)
+    {
+        return file.Type == MissionType.Sending ||
+                    file.Type == MissionType.WaitSending ||
+                    file.Type == MissionType.WaitResumeSending ||
+                    file.Type == MissionType.SendingCompleted;
+    }
+    FileItem ConvertToFileItem(ClientMission file)
+    {
+        var isSending= IsSendingFile(file);
+        var item = new FileItem(this, isSending)
         {
-            foreach(var file in Client.UdpFiles)
-            {
-                var fileItem = new FileItem(this, file.Value.IsSending)
-                {
-                    FileId = file.Value.FileId,
-                    Name = file.Value.FileName,
-                    Length = file.Value.FileLength,
-                    Percent = 1,
-                    Description = file.Value.TextValue,
-                    Path = file.Value.Path,
-                    State=FileItemState.Completed,
-                    CreateTime=file.Value.CreateTime,
-                };
-                if (fileItem.IsSendingFile)
-                {
-                    SendingFiles.Add(fileItem);
-                }
-                else
-                {
-                    Files.Add(fileItem);
-                }
-            }
+            FileId = file.FileId,
+            Name = file.FileName,
+            Length = file.FileLength,
+            Path = file.FilePath,
+            CreateTime = file.CreateTime,
+            Percent = (double)file.Position / file.FileLength,
+        };
+        if (item.Percent == 0)
+        {
+            item.State = FileItemState.Waiting;
         }
-        Files = new ObservableCollection<FileItem>(Files.OrderByDescending(f => f.CreateTime).ToList());
-        SendingFiles = new ObservableCollection<FileItem>(SendingFiles.OrderByDescending(f => f.CreateTime).ToList());
+        else if (item.Percent >= 1)
+        {
+            item.State = FileItemState.Completed;
+        }
+        else
+        {
+            item.State = FileItemState.Stopped;
+        }
+        return item;
     }
 
 
-
-
     DateTime lastUpdate;
-    private void Client_Recieving(object sender, FileResultEventArgs e)
+    private void Client_OnMissionHandled(object sender, ClientMission e)
     {
-        Log($"On Recieing:state {e.State},fileId {e.FileId},fileName {e.FileName},fileLength {e.FileLength}");
-        if (e.State == FileResultState.Start)
+        if (e.Type == MissionType.WaitSending)
         {
             SendingOrRecieving = true;
             var target = Files.FirstOrDefault(f => f.FileId == e.FileId);
             if (target == null)
             {
-                target = new FileItem(this,false)
-                {
-                    FileId = e.FileId,
-                    Name = e.FileName,
-                    Percent = 0,
-                    Length = e.FileLength,
-                    State = FileItemState.Waiting,
-                    CreateTime=DateTime.Now,
-                };
+                TryAddMission(e);
+                target = ConvertToFileItem(e);
                 lastUpdate = DateTime.Now;
                 MainThread.BeginInvokeOnMainThread(() =>
                 {
-                    Files.Insert(0,target);
+                    SendingFiles.Insert(0, target);
                     Log($"add {e.FileId} to recieving files");
                 });
             }
         }
-        else if (e.State == FileResultState.Updating)
+        else if(e.Type== MissionType.Sending)
+        {
+            SendingOrRecieving = true;
+            var target = SendingFiles.FirstOrDefault(f => f.FileId == e.FileId);
+            if (target != null && target.State != FileItemState.Completed)
+            {
+                target.Working = true;
+                target.State = FileItemState.Working;
+                var delta = DateTime.Now - lastUpdate;
+                lastUpdate = DateTime.Now;
+                target.Speed =
+                    (long)((e.Position - (target.Percent * target.Length))
+                    /
+                    (delta.TotalSeconds));
+                target.Percent = (double)e.Position / e.FileLength;
+                Log($"update sending file prograss :percent {target.Percent},position {e.Position}");
+            }
+        }
+        else if (e.Type == MissionType.WaitResumeSending)
+        {
+            SendingOrRecieving = false;
+            var target = SendingFiles.FirstOrDefault(f => f.FileId == e.FileId);
+            if (target != null)
+            {
+                target.State = FileItemState.Stopped;
+                target.Working = false;
+                SaveFiles();
+                DisplayAlert("传输停止", $"{e.FileName}");
+                Log($"file {e.FileId}({e.FileName}) send stopped");
+
+            }
+        }
+        else if (e.Type == MissionType.SendingCompleted)
+        {
+            SendingOrRecieving = false;
+            var target = SendingFiles.FirstOrDefault(f => f.FileId == e.FileId);
+            if (target != null)
+            {
+                target.State = FileItemState.Completed;
+                if (e.Text != null)
+                {
+                    target.Description = e.Text;
+                }
+                target.Path = e.FilePath;
+                target.Percent = 1;
+                DisplayAlert("发送完毕", e.FileName);
+                Log($"file {e.FileId}({e.FileName}) sended success");
+            }
+            else
+            {
+                TryAddMission(e);
+                target = ConvertToFileItem(e);
+                if (e.Text != null)
+                {
+                    target.Description = e.Text;
+                }
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    SendingFiles.Insert(0, target);
+                    Log($"add {e.FileId} to sending files");
+                });
+            }
+        }
+        else if (e.Type == MissionType.WaitRecieving)
+        {
+            SendingOrRecieving = true;
+            var target = Files.FirstOrDefault(f => f.FileId == e.FileId);
+            if (target == null)
+            {
+                TryAddMission(e);
+                target = ConvertToFileItem(e);
+                lastUpdate = DateTime.Now;
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    Files.Insert(0, target);
+                    Log($"add {e.FileId} to recieving files");
+                });
+            }
+        }
+        else if (e.Type == MissionType.Recieving)
         {
             SendingOrRecieving = true;
             var target = Files.FirstOrDefault(f => f.FileId == e.FileId);
@@ -536,36 +538,41 @@ public partial class App : Application
                 Log($"update recieving file prograss :percent {target.Percent},position {e.Position}");
             }
         }
-        else if (e.State == FileResultState.Ending)
+        else if (e.Type == MissionType.WaitResumeRecieving)
+        {
+            SendingOrRecieving = false;
+            var target = Files.FirstOrDefault(f => f.FileId == e.FileId);
+            if (target != null)
+            {
+                target.Working = false;
+                target.State = FileItemState.Stopped;
+                SaveFiles();
+                Log($"file {e.FileId}({e.FileName}) recieved stopped");
+                DisplayAlert("传输停止", $"{e.FileName}");
+            }
+        }
+        else if (e.Type == MissionType.RecievingComleted)
         {
             SendingOrRecieving = false;
             var target = Files.FirstOrDefault(f => f.FileId == e.FileId);
             if (target != null)
             {
                 target.State = FileItemState.Completed;
-                if (e.TextValue != null)
+                if (e.Text != null)
                 {
-                    target.Description = e.TextValue;
+                    target.Description = e.Text;
                 }
-                target.Path = e.SavedPath;
+                target.Path = e.FilePath;
                 target.Percent = 1;
                 Log($"file {e.FileId}({e.FileName}) recieved success");
-
             }
             else
             {
-                target = new FileItem(this, false)
+                TryAddMission(e);
+                target = ConvertToFileItem(e);
+                if (e.Text != null)
                 {
-                    FileId = e.FileId,
-                    Name = e.FileName,
-                    Percent = 1,
-                    Length = e.FileLength,
-                    State = FileItemState.Completed,
-                    CreateTime = DateTime.Now,
-                };
-                if (e.TextValue != null)
-                {
-                    target.Description=e.TextValue;
+                    target.Description = e.Text;
                 }
                 MainThread.BeginInvokeOnMainThread(() =>
                 {
@@ -578,122 +585,13 @@ public partial class App : Application
                 Task.Run(() => OpenRecievedFile(target));
                 return;
             }
-            if (e.TextValue != null)
+            if (e.Text!= null)
             {
-                DisplayAlert("收到文本", e.TextValue);               
+                DisplayAlert("收到文本", e.Text);
             }
             else
             {
-                DisplayAlert("收到文件", e.SavedPath);
-            }
-
-        }
-        else if (e.State == FileResultState.Stop)
-        {
-            SendingOrRecieving = false;
-            var target = Files.FirstOrDefault(f => f.FileId == e.FileId);
-            if (target != null)
-            {
-                target.Working = false;
-                target.State = FileItemState.Stopped;
-                Log($"file {e.FileId}({e.FileName}) recieved stopped");
-                DisplayAlert("传输停止", $"{e.FileName}");
-            }
-        }
-    }
-    private void Client_Sending(object sender, FileResultEventArgs e)
-    {
-        Log($"On Sending:state {e.State},fileId {e.FileId},fileName {e.FileName},fileLength {e.FileLength}");
-        if (e.State == FileResultState.Start)
-        {
-            SendingOrRecieving = true;
-            var target = SendingFiles.FirstOrDefault(f => f.FileId == e.FileId);
-            if (target == null)
-            {
-                target = new FileItem(this,true)
-                {
-                    FileId = e.FileId,
-                    Name = e.FileName,
-                    Percent = 0,
-                    Length = e.FileLength,
-                    State = FileItemState.Waiting,
-                    CreateTime = DateTime.Now,
-                };
-                lastUpdate = DateTime.Now;
-                MainThread.BeginInvokeOnMainThread(() =>
-                {
-                    SendingFiles.Insert(0, target);
-                    Log($"add {e.FileId} to sending files");
-                });
-            }
-        }
-        else if (e.State == FileResultState.Updating)
-        {
-            SendingOrRecieving = true;
-            var target = SendingFiles.FirstOrDefault(f => f.FileId == e.FileId);
-            if (target != null && target.State != FileItemState.Completed)
-            {
-                target.Working=true;
-                target.State = FileItemState.Working;
-                var delta = DateTime.Now - lastUpdate;
-                lastUpdate = DateTime.Now;
-                target.Speed =
-                    (long)((e.Position - (target.Percent * target.Length))
-                    /
-                    (delta.TotalSeconds));
-                target.Percent = (double)e.Position / e.FileLength;
-                Log($"update sending file prograss :percent {target.Percent},position {e.Position}");
-            }
-        }
-        else if (e.State == FileResultState.Ending)
-        {
-            SendingOrRecieving = false;
-            var target = SendingFiles.FirstOrDefault(f => f.FileId == e.FileId);
-            if (target != null)
-            {
-                target.State = FileItemState.Completed;
-                if (e.TextValue != null)
-                {
-                    target.Description = e.TextValue;
-                }
-                target.Path = e.SavedPath;
-                target.Percent = 1;
-                DisplayAlert("发送完毕", e.FileName);
-                Log($"file {e.FileId}({e.FileName}) sended success");
-            }
-            else
-            {
-                target = new FileItem(this, true)
-                {
-                    FileId = e.FileId,
-                    Name = e.FileName,
-                    Percent = 1,
-                    Length = e.FileLength,
-                    State = FileItemState.Completed,
-                    CreateTime = DateTime.Now,
-                    Path=e.SavedPath,
-                };
-                if (e.TextValue != null)
-                {
-                    target.Description = e.TextValue;
-                }
-                MainThread.BeginInvokeOnMainThread(() =>
-                {
-                    SendingFiles.Insert(0, target);
-                    Log($"add {e.FileId} to sending files");
-                });
-            }
-        }
-        else if (e.State == FileResultState.Stop)
-        {
-            SendingOrRecieving = false;
-            var target = SendingFiles.FirstOrDefault(f => f.FileId == e.FileId);
-            if (target != null)
-            {
-                target.State = FileItemState.Stopped;
-                target.Working = false;
-                DisplayAlert("传输停止", $"{e.FileName}");
-                Log($"file {e.FileId}({e.FileName}) send stopped");
+                DisplayAlert("收到文件", e.FilePath);
             }
         }
     }
@@ -714,9 +612,10 @@ public partial class App : Application
     protected override void OnStart()
     {
         base.OnStart();
-        Task.Run(() =>
+        Task.Run(async () =>
         {
-            FileSaver?.LoadFolderToSave(DataStore);
+            await Client.SetUp();
+            Client.ExposeThisDevice();
         });
     }
 
@@ -727,38 +626,13 @@ public partial class App : Application
             return FileType.Any;
         }
         var extension=Path.GetExtension(fileName).ToLower().Replace(".","");
-        switch(extension)
+        return extension switch
         {
-            default:
-                return FileType.Any;
-            case "txt":
-            case "pdf":
-            case "epub":
-            case "mobi":
-            case "excel":
-            case "word":
-            case "lrc":
-                return FileType.Text;
-            case "jpg":
-            case "gif":
-            case "jpeg":
-            case "png":
-            case "webp":
-                return FileType.Image;
-            case "mp3":
-            case "wav":
-            case "flac":
-
-                return FileType.Audio;
-            case "mp4":
-            case "3gp":
-            case "avi":
-            case "mkv":
-            case "rmvb":
-            case "mov":
-            case "wmv":
-                return FileType.Video;
-
-        }
+            "txt" or "pdf" or "epub" or "mobi" or "excel" or "word" or "lrc" => FileType.Text,
+            "jpg" or "gif" or "jpeg" or "png" or "webp" => FileType.Image,
+            "mp3" or "wav" or "flac" => FileType.Audio,
+            "mp4" or "3gp" or "avi" or "mkv" or "rmvb" or "mov" or "wmv" => FileType.Video,
+            _ => FileType.Any,
+        };
     }
 }

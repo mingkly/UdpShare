@@ -84,7 +84,7 @@ namespace UdpQuickShare.ViewModels
             Messages = App.Messages;
             CurrentDevice = $"{App.DeviceName}({app.Client.UdpClient.CurrentIp?.Address})";
             TargetDevice = "选择发送设备";
-            app.SendingDeviceChanged += App_SendingDeviceChanged;
+            app.DeviceManager.SendingDeviceChanged += App_SendingDeviceChanged;
             app.Client.CurrentIpChanged += Client_CurrentIpChanged;
             app.Client.ExposedChanged += Client_ExposedChanged;
             app.SendingOrRecievingChanged += (sender, e) => CanSend = !e;
@@ -101,7 +101,7 @@ namespace UdpQuickShare.ViewModels
         }
         private void App_SendingDeviceChanged(object sender, EventArgs e)
         {
-            var sendTarget = app.Devices.FirstOrDefault(d => d.SendThis);
+            var sendTarget = app.DeviceManager.SendingDevice;
             if (sendTarget != null)
             {
                 TargetDevice = $"{sendTarget.Name}({sendTarget.Ip})";

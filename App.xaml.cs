@@ -103,6 +103,7 @@ public partial class App : Application
     }
     public static void Log(string message)
     {
+        
 
 #if DEBUG
         MessagesAdd(message);
@@ -112,7 +113,10 @@ public partial class App : Application
     }
     public static void Log(object value)
     {
+
 #if DEBUG
+        DisplayAlert("", value.ToString());
+        MessagesAdd(value.ToString());
         Debug.WriteLine(value);
 #endif
     }
@@ -402,7 +406,7 @@ public partial class App : Application
             FileId = file.FileId,
             Name = file.FileName,
             Length = file.FileLength,
-            Path = file.FilePath,
+            Path = file.FilePlatformPath,
             CreateTime = file.CreateTime,
             Percent = (double)file.Position / file.FileLength,
         };
@@ -423,6 +427,7 @@ public partial class App : Application
 
 
     DateTime lastUpdate;
+    
     private void Client_OnMissionHandled(object sender, ClientMission e)
     {
         if (e.Type == MissionType.WaitSending)
@@ -470,7 +475,6 @@ public partial class App : Application
                 SaveFiles();
                 DisplayAlert("传输停止", $"{e.FileName}");
                 Log($"file {e.FileId}({e.FileName}) send stopped");
-
             }
         }
         else if (e.Type == MissionType.SendingCompleted)
@@ -484,7 +488,7 @@ public partial class App : Application
                 {
                     target.Description = e.Text;
                 }
-                target.Path = e.FilePath;
+                target.Path = e.FilePlatformPath;
                 target.Percent = 1;
                 DisplayAlert("发送完毕", e.FileName);
                 Log($"file {e.FileId}({e.FileName}) sended success");
@@ -503,6 +507,8 @@ public partial class App : Application
                     Log($"add {e.FileId} to sending files");
                 });
             }
+            e.Position = e.FileLength;
+            SaveFiles();
         }
         else if (e.Type == MissionType.WaitRecieving)
         {
@@ -562,7 +568,7 @@ public partial class App : Application
                 {
                     target.Description = e.Text;
                 }
-                target.Path = e.FilePath;
+                target.Path = e.FilePlatformPath;
                 target.Percent = 1;
                 Log($"file {e.FileId}({e.FileName}) recieved success");
             }
@@ -580,6 +586,8 @@ public partial class App : Application
                     Log($"add {e.FileId} to recieving files");
                 });
             }
+            e.Position = e.FileLength;
+            SaveFiles();
             if (AutoOpen && !opened)
             {
                 Task.Run(() => OpenRecievedFile(target));

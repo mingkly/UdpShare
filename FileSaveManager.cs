@@ -13,6 +13,24 @@ namespace UdpQuickShare
 {
     internal class FileSaveManager
     {
+        public class FileResultJson
+        {
+            public string FileName { get; set; }
+
+            public string FullPath { get; set; }
+
+            public string PlatformPath { get; set; }
+            public static FileResultJson GetFromFilePickFesult(FilePickResult filePickResult)
+            {
+                return new FileResultJson
+                {
+                    FileName = filePickResult.FileName,
+                    FullPath = filePickResult.FullPath,
+                    PlatformPath = filePickResult.PlatformPath,
+                };
+            }
+        }
+
         public const string Videos = "UdpShare/Videos";
         public const string Images = "UdpShare/Images";
         public const string Texts = "UdpShare/Texts";
@@ -34,11 +52,19 @@ namespace UdpQuickShare
         }
         public static async Task ChooseSaveFolder(FileType fileType)
         {
-            var res = await MKFilePicker.MKFilePicker.PickFolderAsync(null);
-            if (res != null)
+            try
             {
-                DataStore.Save(fileType.ToString(), res);
+                var res = await MKFilePicker.MKFilePicker.PickFolderAsync(null);
+                if (res != null)
+                {
+                    DataStore.Save(fileType.ToString(), FileResultJson.GetFromFilePickFesult(res));
+                }
             }
+            catch(Exception e)
+            {
+                App.Log(e);
+            }
+
         }
         static string GetDefaultChildFolder(FileType fileType)
         {
@@ -53,7 +79,7 @@ namespace UdpQuickShare
         }
         public static string GetSaveFolder(FileType fileType)
         {
-            var dataStoreRes = DataStore.Get<FilePickResult>(fileType.ToString());
+            var dataStoreRes = DataStore.Get<FileResultJson>(fileType.ToString());
             if(dataStoreRes != null)
             {
                 return dataStoreRes.FullPath;
@@ -63,9 +89,11 @@ namespace UdpQuickShare
                 return Path.Combine(DefaultFolderProvider.GetDefaultFolder(4),GetDefaultChildFolder(fileType));
             }
         }
+
         public static FileCreateInfo CreateFile(string fileName,FileType fileType)
         {
-            var dataStoreRes = DataStore.Get<FilePickResult>(fileType.ToString());
+            
+            var dataStoreRes = DataStore.Get<FileResultJson>(fileType.ToString());
             if (dataStoreRes != null)
             {
                 var file = MKFilePicker.MKFilePicker.CreateFile(dataStoreRes.PlatformPath, fileName);

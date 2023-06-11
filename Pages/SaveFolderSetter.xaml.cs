@@ -57,7 +57,7 @@ public partial class SaveFolderSetter : ContentPage
     {
 		var foler = e.Item as FolderItem;
 		await FileSaveManager.ChooseSaveFolder(foler.FileType);
-		foler.Path=FileSaveManager.GetSaveFolder(foler.FileType);
+		foler.Path=FileSaveManager.GetSaveFolder(foler.FileType); 
     }
 
     private async void Switch_Toggled(object sender, ToggledEventArgs e)

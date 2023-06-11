@@ -18,7 +18,7 @@ namespace UdpQuickShare.Services
             try
             {
 #if ANDROID
-                    Android.Net.Uri uri=fileItem.Path.StartsWith("content")?Android.Net.Uri.Parse(fileItem.Path):Android.Net.Uri.Parse($"file:/{fileItem.Path}");
+                    Android.Net.Uri uri=fileItem.Path.StartsWith("content")?Android.Net.Uri.Parse(fileItem.Path):Android.Net.Uri.Parse($"file://{fileItem.Path.TrimStart('/')}");
                     var context = Android.App.Application.Context;
                     var intent = new Intent(Intent.ActionView,uri );
                     intent.AddFlags(ActivityFlags.NewTask);

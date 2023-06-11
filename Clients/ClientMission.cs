@@ -87,9 +87,15 @@ namespace UdpQuickShare.Clients
             Position = 0;
             FileType = FileType.Text;
             FileLength=Encoding.UTF8.GetByteCount(text);
-            FileName= text?.Substring(0, Math.Min(5, text.Length));
+            FileName=CreateFileName(text);
             FilePath = FileName;
             FilePlatformPath= FileName;
+        }
+        static char[] InvalidFileNameChars = Path.GetInvalidFileNameChars();
+        string CreateFileName(string text)
+        {
+            //var head=text.Where(c=>!InvalidFileNameChars.Contains(c)).Take(5).ToArray();
+            return$"文本{text.GetHashCode()}";
         }
         public Stream OpenRead()
         {

@@ -40,6 +40,7 @@ namespace UdpQuickShare.Clients
                 {
                     try
                     {
+                        await Task.Delay(200);
                         await tcpClient.ConnectAsync(endPoint, cancellation);
                         
                     }
@@ -47,7 +48,7 @@ namespace UdpQuickShare.Clients
                     {
                         //Log($"connect ex:{ex}");
                         TcpFileSender.Log($"{3 - tryCount} connect failed");
-                        await Task.Delay(2000);
+                        await Task.Delay(1200);
                     }
                 }
                 if (tcpClient.Connected)

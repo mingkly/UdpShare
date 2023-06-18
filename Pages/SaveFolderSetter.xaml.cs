@@ -9,7 +9,10 @@ public partial class SaveFolderSetter : ContentPage
 	{
 		InitializeComponent();
         Folders.ItemsSource = CreateFolders();
-	}
+#if WINDOWS
+UseDirect.IsVisible = false;
+#endif
+    }
     protected override void OnAppearing()
     {
         base.OnAppearing();

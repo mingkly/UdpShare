@@ -174,7 +174,7 @@ public partial class App : Application
         }
         Log($"file [{res.FileName}] in [{res.FullPath}] picked");
         var mission = new ClientMission(MissionType.WaitSending,
-            (uint)res.GetHashCode(),
+            (uint)res.GetHashCode()+(uint)new Random().Next(0,2000),
             res.FileName,
             res.FullPath,
             res.PlatformPath,
@@ -198,7 +198,7 @@ public partial class App : Application
             foreach(var res in ress)
             {
                 var mission = new ClientMission(MissionType.WaitSending,
-                    (uint)res.GetHashCode(),
+                    (uint)res.GetHashCode() + (uint)new Random().Next(0, 2000),
                     res.FileName,
                     res.FullPath,
                     res.PlatformPath,
@@ -300,6 +300,7 @@ public partial class App : Application
         }
         else if(!SendingOrRecieving)
         {
+            BackgroundManager.WakeCpu();
             Client.ResumeRecieving(fileItem.FileId);
         }
     }
@@ -344,6 +345,7 @@ public partial class App : Application
         }
         else if (!SendingOrRecieving)
         {
+            BackgroundManager.WakeCpu();
             Client.ResumeSending(fileItem.FileId);
         }
     }
@@ -432,6 +434,7 @@ public partial class App : Application
     {
         if (e.Type == MissionType.WaitSending)
         {
+            BackgroundManager.WakeCpu();
             SendingOrRecieving = true;
             var target = Files.FirstOrDefault(f => f.FileId == e.FileId);
             if (target == null)
@@ -466,6 +469,7 @@ public partial class App : Application
         }
         else if (e.Type == MissionType.WaitResumeSending)
         {
+            BackgroundManager.SleepCpu();
             SendingOrRecieving = false;
             var target = SendingFiles.FirstOrDefault(f => f.FileId == e.FileId);
             if (target != null)
@@ -479,6 +483,7 @@ public partial class App : Application
         }
         else if (e.Type == MissionType.SendingCompleted)
         {
+            BackgroundManager.SleepCpu();
             SendingOrRecieving = false;
             var target = SendingFiles.FirstOrDefault(f => f.FileId == e.FileId);
             if (target != null)
@@ -512,6 +517,7 @@ public partial class App : Application
         }
         else if (e.Type == MissionType.WaitRecieving)
         {
+            BackgroundManager.WakeCpu();
             SendingOrRecieving = true;
             var target = Files.FirstOrDefault(f => f.FileId == e.FileId);
             if (target == null)
@@ -546,6 +552,7 @@ public partial class App : Application
         }
         else if (e.Type == MissionType.WaitResumeRecieving)
         {
+            BackgroundManager.SleepCpu();
             SendingOrRecieving = false;
             var target = Files.FirstOrDefault(f => f.FileId == e.FileId);
             if (target != null)
@@ -559,6 +566,7 @@ public partial class App : Application
         }
         else if (e.Type == MissionType.RecievingComleted)
         {
+            BackgroundManager.SleepCpu();
             SendingOrRecieving = false;
             var target = Files.FirstOrDefault(f => f.FileId == e.FileId);
             if (target != null)

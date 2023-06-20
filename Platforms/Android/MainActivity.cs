@@ -4,6 +4,8 @@ using Android.Content.PM;
 using Android.Net;
 using Android.OS;
 using Android.Provider;
+using Android.Views;
+using AndroidX.Core.View;
 using AndroidX.DocumentFile.Provider;
 
 using UdpQuickShare.FileActions.FileSavers;
@@ -20,6 +22,20 @@ public class MainActivity : MauiAppCompatActivity
     {
         base.OnCreate(savedInstanceState);;
         Instance = this;
+        WindowCompat.SetDecorFitsSystemWindows(Window, false);
+        if (Build.VERSION.SdkInt >= Android.OS.BuildVersionCodes.Q)
+        {
+            var windowInsetsController =
+                WindowCompat.GetInsetsController(Window, Window.DecorView);
+            var wa = Window.Attributes;
+            wa.LayoutInDisplayCutoutMode = LayoutInDisplayCutoutMode.Always;
+            if (windowInsetsController == null)
+            {
+                return;
+            }
+            windowInsetsController.AppearanceLightStatusBars = true;
+            windowInsetsController.AppearanceLightNavigationBars = true;
+        }
     }
     public static string GetAbsolutePath(string path)
     {

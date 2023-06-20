@@ -4,7 +4,10 @@
              Shell.NavBarIsVisible="True"
              xmlns:model="clr-namespace:UdpQuickShare.ViewModels"
              xmlns:local="clr-namespace:UdpQuickShare"
-             x:Class="UdpQuickShare.MainPage">
+             xmlns:views="clr-namespace:UdpQuickShare.Views"
+             x:Class="UdpQuickShare.MainPage" 
+             >
+
     <ContentPage.BindingContext>
         <model:MainPageViewModel />
     </ContentPage.BindingContext>
@@ -29,57 +32,6 @@
                     Command="{Binding ChooseDeviceCommand}"/>
         </HorizontalStackLayout>
     </Shell.TitleView>
-    <ScrollView>
-        <VerticalStackLayout
-            Spacing="25"
-            Padding="30,0"
-            VerticalOptions="Center">
-            <ListView x:Name="MessageList"
-                      IsVisible="false"
-                      ItemsSource="{Binding Messages}"
-                      SelectionMode="None"
-                      HeightRequest="300"
-                      RowHeight="50">
-                <ListView.ItemTemplate>
-                    <DataTemplate>
-                        <ViewCell>
-                            <Label Text="{Binding}"
-                                   MaxLines="4"/>
-                        </ViewCell>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
-
-
-            <Label Text="发送文本"/>
-            <Border >
-                <Entry x:Name="StringSender"                  
-                   ReturnCommand="{Binding SendTextCommand}"
-                       ReturnCommandParameter="{Binding Source={x:Reference StringSender},Path=Text}"/>
-            </Border>
-            <Button Text="发送图片"
-                    x:Name="SendImages"
-                    IsEnabled="{Binding CanSend}"
-                    Command="{Binding SendImageCommand}"/>
-            <Button Text="发送音频"
-                    x:Name="SendAudios"
-                    IsEnabled="{Binding CanSend}"
-                    Command="{Binding SendAudioCommand}"/>
-            <Button Text="发送视频"
-                    x:Name="SendVideos"
-                    IsEnabled="{Binding CanSend}"
-                    Command="{Binding SendVideoCommand}"/>
-            <Button Text="发送其他"
-                    x:Name="SendOthers"
-                    IsEnabled="{Binding CanSend}"
-                    Command="{Binding SendOtherCommand}"/>
-            <Button Text="发送多个"
-                    x:Name="SendMulti"
-                    IsEnabled="{Binding CanSend}"
-                    Command="{Binding SendMultiCommand}"/>
-        </VerticalStackLayout>
-    </ScrollView>
-
 
 
 </ContentPage>

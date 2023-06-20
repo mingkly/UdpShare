@@ -62,7 +62,7 @@ namespace UdpQuickShare.ViewModels
         {
             this.app = app;
             CanSend = true;
-            SendTextCommand=new AsyncRelayCommand<string>(app.SendText, canExecute: (s) => !app.SendingOrRecieving);
+            SendTextCommand=new AsyncRelayCommand(app.SendText, canExecute: () => !app.SendingOrRecieving);
             SendImageCommand = new AsyncRelayCommand(() => app.SendFile(FileType.Image), canExecute: () => !app.SendingOrRecieving);
             SendVideoCommand = new AsyncRelayCommand(() => app.SendFile(FileType.Video), canExecute: () => !app.SendingOrRecieving);
             SendAudioCommand = new AsyncRelayCommand(() => app.SendFile(FileType.Audio), canExecute: () => !app.SendingOrRecieving);

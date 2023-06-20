@@ -1,13 +1,6 @@
 ﻿
-using Microsoft.Maui.Storage;
 using System.ComponentModel;
-using System.Diagnostics;
-using System.Net;
-using System.Text;
-using UdpQuickShare.FileActions;
-using UdpQuickShare.Pages;
-using UdpQuickShare.Protocols;
-using UdpQuickShare.Services;
+
 
 namespace UdpQuickShare;
 
@@ -16,8 +9,26 @@ public partial class MainPage : ContentPage,INotifyPropertyChanged
     public MainPage()
 	{
 		InitializeComponent();
+        Content = new Views.MainPageVerticalView();
     }
-
+    bool lastIsVertical=true;
+    protected override void OnSizeAllocated(double width, double height)
+    {
+        base.OnSizeAllocated(width, height);
+        bool isVertical = width < height;
+        if(lastIsVertical!= isVertical)
+        {
+            if (width > height)
+            {
+                Content = new Views.MainPageHorizontalView();
+            }
+            else
+            {
+                Content = new Views.MainPageVerticalView();
+            }
+            lastIsVertical = isVertical;
+        }     
+    }
 
 }
 

@@ -8,8 +8,16 @@ public partial class SaveFolderSetter : ContentPage
 	public SaveFolderSetter()
 	{
 		InitializeComponent();
+<<<<<<< Updated upstream
         Folders.ItemsSource = CreateFolders();
 	}
+=======
+        BindableLayout.SetItemsSource(Folders, CreateFolders());
+#if WINDOWS
+UseDirect.IsVisible = false;
+#endif
+    }
+>>>>>>> Stashed changes
     protected override void OnAppearing()
     {
         base.OnAppearing();
@@ -75,5 +83,12 @@ public partial class SaveFolderSetter : ContentPage
                 });
             }
         }
+    }
+
+    private async void TapGestureRecognizer_Tapped(object sender, TappedEventArgs e)
+    {
+        var foler =(sender as BindableObject).BindingContext as FolderItem;
+        await FileSaveManager.ChooseSaveFolder(foler.FileType);
+        foler.Path = FileSaveManager.GetSaveFolder(foler.FileType);
     }
 }

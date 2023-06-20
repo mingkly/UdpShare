@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="UdpQuickShare.Views.MainPageVerticalView"
+             xmlns:model="clr-namespace:UdpQuickShare.ViewModels"
+             x:DataType="model:MainPageViewModel">
+    <ScrollView>
+        <VerticalStackLayout
+            Spacing="25"
+            Padding="30,0"
+            VerticalOptions="Start">
+            <ListView x:Name="MessageList"
+                      IsVisible="false"
+                      ItemsSource="{Binding Messages}"
+                      SelectionMode="None"
+                      HeightRequest="300"
+                      RowHeight="50">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <ViewCell>
+                            <Label Text="{Binding}"
+                                   MaxLines="4"/>
+                        </ViewCell>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+
+            <Button Text="发送文本" Command="{Binding SendTextCommand}" IsEnabled="{Binding CanSend}"/>
+            <Button Text="发送图片"
+                    x:Name="SendImages"
+                    IsEnabled="{Binding CanSend}"
+                    Command="{Binding SendImageCommand}"/>
+            <Button Text="发送音频"
+                    x:Name="SendAudios"
+                    IsEnabled="{Binding CanSend}"
+                    Command="{Binding SendAudioCommand}"/>
+            <Button Text="发送视频"
+                    x:Name="SendVideos"
+                    IsEnabled="{Binding CanSend}"
+                    Command="{Binding SendVideoCommand}"/>
+            <Button Text="发送其他"
+                    x:Name="SendOthers"
+                    IsEnabled="{Binding CanSend}"
+                    Command="{Binding SendOtherCommand}"/>
+            <Button Text="发送多个"
+                    x:Name="SendMulti"
+                    IsEnabled="{Binding CanSend}"
+                    Command="{Binding SendMultiCommand}"/>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentView>

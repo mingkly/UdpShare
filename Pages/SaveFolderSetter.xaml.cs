@@ -8,16 +8,12 @@ public partial class SaveFolderSetter : ContentPage
 	public SaveFolderSetter()
 	{
 		InitializeComponent();
-<<<<<<< Updated upstream
-        Folders.ItemsSource = CreateFolders();
-	}
-=======
-        BindableLayout.SetItemsSource(Folders, CreateFolders());
+    BindableLayout.SetItemsSource(Folders, CreateFolders());
 #if WINDOWS
 UseDirect.IsVisible = false;
 #endif
     }
->>>>>>> Stashed changes
+
     protected override void OnAppearing()
     {
         base.OnAppearing();
@@ -30,31 +26,31 @@ UseDirect.IsVisible = false;
             new FolderItem
             {
                 FileType = FileActions.FileType.Text,
-                Name = "文本",
+                Name = "脦脛卤戮",
                 Path =FileSaveManager.GetSaveFolder(FileActions.FileType.Text),
             },
             new FolderItem
             {
                 FileType = FileActions.FileType.Image,
-                Name = "图片",
+                Name = "脥录脝卢",
                 Path = FileSaveManager.GetSaveFolder(FileActions.FileType.Image),
             },
             new FolderItem
             {
                 FileType = FileActions.FileType.Audio,
-                Name = "音频",
+                Name = "脪么脝碌",
                 Path = FileSaveManager.GetSaveFolder(FileActions.FileType.Audio),
             },
             new FolderItem
             {
                 FileType = FileActions.FileType.Video,
-                Name = "视频",
+                Name = "脢脫脝碌",
                 Path = FileSaveManager.GetSaveFolder(FileActions.FileType.Video),
             },
             new FolderItem
             {
                 FileType = FileActions.FileType.Any,
-                Name = "其他",
+                Name = "脝盲脣没",
                 Path = FileSaveManager.GetSaveFolder(FileActions.FileType.Any),
             }
         };

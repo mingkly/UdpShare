@@ -6,7 +6,7 @@
              Title="SaveFolderSetter">
 <<<<<<< Updated upstream
     <VerticalStackLayout>
-        <HorizontalStackLayout>
+        <HorizontalStackLayout x:Name="UseDirect">
             <Label Text="使用直接路径(安卓速度更快)"/>
 =======
     <Shell.TitleView>

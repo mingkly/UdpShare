@@ -37,19 +37,21 @@ public class MainActivity : MauiAppCompatActivity
             windowInsetsController.AppearanceLightNavigationBars = true;
         }
     }
-    public static string GetAbsolutePath(string path)
+    static PowerManager.WakeLock wakeLock;
+    public  static void WakeCpu()
     {
-        var uri=Android.Net.Uri.Parse(path);
-        System.Diagnostics.Debug.WriteLine(uri.Path);
-        uri = MediaStore.GetMediaUri(Android.App.Application.Context, uri);
-        using var cusor = Android.App.Application.Context.ContentResolver?.Query(uri,
-            new string[] { "_data",MediaStore.IMediaColumns.RelativePath}, null, null, null);
-        if (cusor != null && cusor.MoveToNext())
+        if(wakeLock == null)
         {
-            var dataCol = cusor.GetColumnIndex("_data");
-            return cusor.GetString(dataCol);
+            var context = Android.App.Application.Context;
+            PowerManager powerManager = (PowerManager)context.GetSystemService(Context.PowerService);
+            wakeLock = powerManager.NewWakeLock(WakeLockFlags.Partial, "Download");
         }
-        return uri.Path;
+        wakeLock.Acquire();
     }
-
+    public static void SleepCpu()
+    {
+        wakeLock?.Release();
+        wakeLock?.Dispose();
+        wakeLock = null;
+    }
 }

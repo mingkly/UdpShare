@@ -8,16 +8,22 @@
     <ContentPage.BindingContext>
         <model:DevicesPageViewModel />
     </ContentPage.BindingContext>
-    <Grid RowDefinitions="3*,*,8*,*,3*"
-      ColumnDefinitions="*,7*,*">
+    <Grid Padding="30" 
+        RowDefinitions="50,*,50"
+      ColumnDefinitions="100,4*,4*,100">
         <Button Text="搜寻设备"
                 x:Name="FindDevice"
-                Grid.Column="1"
-                Grid.Row="1"
+                Grid.Column="2"
+                Grid.Row="0"
                 Command="{Binding FindDeviceCommand}"/>
+        <Button Text="返回"
+                Grid.Row="0"
+                Grid.Column="1"
+                Clicked="Button_Clicked"/>
         <ListView x:Name="DevicesList"
-                  Grid.Row="2"
+                  Grid.Row="1"
                   Grid.Column="1"
+                  Grid.ColumnSpan="2"
                   RowHeight="50"            
                   ItemsSource="{Binding Devices}"
                   >
@@ -25,7 +31,7 @@
                 <DataTemplate>
                     <ViewCell x:DataType="model:DeviceModel"
                               >
-                        <Grid ColumnDefinitions="4*,*"
+                        <Grid ColumnDefinitions="4*,100"
                               >
                             <Grid.GestureRecognizers>
                                 <TapGestureRecognizer Command="{Binding ChooseCommand}"/>
@@ -55,9 +61,6 @@
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
-        <Button Text="返回"
-                Grid.Row="3"
-                Grid.Column="1"
-                Clicked="Button_Clicked"/>
+
     </Grid>
 </ContentPage>

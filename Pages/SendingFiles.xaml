@@ -25,22 +25,4 @@
                         HorizontalOptions="End"/>
         </Grid>
     </Shell.TitleView>
-    <Grid RowDefinitions="*">
-        <ListView x:Name="Files"
-                  RowHeight="250"
-                  SelectionMode="None"
-                  SeparatorVisibility="Default"
-                  SeparatorColor="Black"
-                  ItemsSource="{Binding Files}"
-                 
-                  >
-            <ListView.ItemTemplate>
-                <DataTemplate>
-                    <ViewCell>
-                        <page:FileItemView/>
-                    </ViewCell>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
-    </Grid>
 </ContentPage>

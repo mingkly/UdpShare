@@ -4,26 +4,38 @@
              x:Class="UdpQuickShare.Pages.SaveFolderSetter"
              xmlns:model="clr-namespace:UdpQuickShare.ViewModels"
              Title="SaveFolderSetter">
+<<<<<<< Updated upstream
     <VerticalStackLayout>
         <HorizontalStackLayout x:Name="UseDirect">
             <Label Text="使用直接路径(安卓速度更快)"/>
+=======
+    <Shell.TitleView>
+        <HorizontalStackLayout x:Name="UseDirect">
+            <Label Text="使用直接路径(安卓速度更快)"
+                   VerticalTextAlignment="Center"/>
+>>>>>>> Stashed changes
             <Switch x:Name="UseDirectPathSwitch"
                     Toggled="Switch_Toggled"/>
         </HorizontalStackLayout>
+    </Shell.TitleView>
+    <ContentPage.Resources>
+        <DataTemplate x:Key="Saves" x:DataType="model:FolderItem">
+            <StackLayout WidthRequest="300" HeightRequest="100">
+                <StackLayout.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="TapGestureRecognizer_Tapped"/>
+                </StackLayout.GestureRecognizers>
+                <Label Text="{Binding Name}"
+                       TextColor="Black"/>
+                <Label Text="{Binding Path}"
+                       TextColor="Green"/>
+            </StackLayout>
+        </DataTemplate>
+    </ContentPage.Resources>
+    <ScrollView>
+        <FlexLayout Wrap="Wrap"
+                x:Name="Folders"
+                JustifyContent="SpaceEvenly"
+                BindableLayout.ItemTemplate="{StaticResource Saves}" />
+    </ScrollView>
 
-        <ListView ItemTapped="Folders_ItemTapped"
-                  RowHeight="80"
-                  HeightRequest="1000"
-                  x:Name="Folders">
-            <ListView.ItemTemplate>
-                <DataTemplate x:DataType="model:FolderItem">
-                    <TextCell Text="{Binding Name}"
-                              TextColor="Black"
-                              DetailColor="Green"
-                              Detail="{Binding Path}"
-                              />
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
-    </VerticalStackLayout>
 </ContentPage>

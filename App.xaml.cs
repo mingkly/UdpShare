@@ -210,12 +210,17 @@ public partial class App : Application
             }      
         });
     }
-    public Task SendText(string text)
+    public async Task SendText()
     {
-        Log($"start sending text :\"{text}\"");
-        var mission = new ClientMission(text, DeviceManager.SendingDeviceIP);
-        _ = Client.HandleMission(mission);
-        return Task.CompletedTask;
+        var text = await MainPage.DisplayPromptAsync("输入文本","", "确定", "取消");
+        if (!string.IsNullOrEmpty(text)&&text != "确定"&&text!="取消")
+        {
+            Log($"start sending text :\"{text}\"");
+
+            var mission = new ClientMission(text, DeviceManager.SendingDeviceIP);
+            _=Client.HandleMission(mission);
+        }
+
     }
     public Task ChooseDevice()
     {

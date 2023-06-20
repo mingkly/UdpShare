@@ -8,11 +8,12 @@ public partial class SaveFolderSetter : ContentPage
 	public SaveFolderSetter()
 	{
 		InitializeComponent();
-        Folders.ItemsSource = CreateFolders();
+    BindableLayout.SetItemsSource(Folders, CreateFolders());
 #if WINDOWS
 UseDirect.IsVisible = false;
 #endif
     }
+
     protected override void OnAppearing()
     {
         base.OnAppearing();
@@ -25,31 +26,31 @@ UseDirect.IsVisible = false;
             new FolderItem
             {
                 FileType = FileActions.FileType.Text,
-                Name = "文本",
+                Name = "脦脛卤戮",
                 Path =FileSaveManager.GetSaveFolder(FileActions.FileType.Text),
             },
             new FolderItem
             {
                 FileType = FileActions.FileType.Image,
-                Name = "图片",
+                Name = "脥录脝卢",
                 Path = FileSaveManager.GetSaveFolder(FileActions.FileType.Image),
             },
             new FolderItem
             {
                 FileType = FileActions.FileType.Audio,
-                Name = "音频",
+                Name = "脪么脝碌",
                 Path = FileSaveManager.GetSaveFolder(FileActions.FileType.Audio),
             },
             new FolderItem
             {
                 FileType = FileActions.FileType.Video,
-                Name = "视频",
+                Name = "脢脫脝碌",
                 Path = FileSaveManager.GetSaveFolder(FileActions.FileType.Video),
             },
             new FolderItem
             {
                 FileType = FileActions.FileType.Any,
-                Name = "其他",
+                Name = "脝盲脣没",
                 Path = FileSaveManager.GetSaveFolder(FileActions.FileType.Any),
             }
         };
@@ -78,5 +79,12 @@ UseDirect.IsVisible = false;
                 });
             }
         }
+    }
+
+    private async void TapGestureRecognizer_Tapped(object sender, TappedEventArgs e)
+    {
+        var foler =(sender as BindableObject).BindingContext as FolderItem;
+        await FileSaveManager.ChooseSaveFolder(foler.FileType);
+        foler.Path = FileSaveManager.GetSaveFolder(foler.FileType);
     }
 }

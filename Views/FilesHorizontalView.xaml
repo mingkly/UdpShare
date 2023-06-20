@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="UdpQuickShare.Views.FilesHorizontalView"
+             xmlns:page="clr-namespace:UdpQuickShare.Pages"
+             >
+    <ContentView.Resources >
+        <DataTemplate x:Key="FileItem">
+            <page:FileItemView WidthRequest="300" HeightRequest="250"/>
+        </DataTemplate>
+    </ContentView.Resources>
+    <ScrollView>
+     <FlexLayout Padding="10"
+         BindableLayout.ItemTemplate="{StaticResource FileItem}"
+            BindableLayout.ItemsSource="{Binding Files}"
+                Wrap="Wrap"
+                 AlignItems="Start"
+                 AlignContent="Start"
+                JustifyContent="SpaceEvenly"/>       
+    </ScrollView>
+
+</ContentView>
